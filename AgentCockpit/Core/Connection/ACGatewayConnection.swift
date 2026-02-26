@@ -109,11 +109,11 @@ public final class ACGatewayConnection: NSObject {
         receiveTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    guard let task = await self?.wsTask else { break }
+                    guard let task = self?.wsTask else { break }
                     let message = try await task.receive()
-                    await self?.handleReceived(message)
+                    self?.handleReceived(message)
                 } catch {
-                    await self?.handleDisconnect(reason: error.localizedDescription)
+                    self?.handleDisconnect(reason: error.localizedDescription)
                     break
                 }
             }
@@ -162,7 +162,7 @@ public final class ACGatewayConnection: NSObject {
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            await self?.startConnect()
+            self?.startConnect()
         }
     }
 }
