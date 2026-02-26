@@ -1,0 +1,53 @@
+name: AgentCockpit
+options:
+  bundleIdPrefix: dev.agentcockpit
+  deploymentTarget:
+    iOS: "17.0"
+  defaultConfig: Debug
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+packages:
+  swift-markdown-ui:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.4.0"
+
+targets:
+  AgentCockpit:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentCockpit
+        excludes:
+          - "Resources/Assets.xcassets/**"
+    resources:
+      - path: AgentCockpit/Resources/Assets.xcassets
+      - path: AgentCockpit/Resources/snippet-templates.json
+      - path: AgentCockpit/Resources/tool-display.json
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        PRODUCT_BUNDLE_IDENTIFIER: dev.agentcockpit.app
+        PRODUCT_NAME: AgentCockpit
+        INFOPLIST_FILE: AgentCockpit/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_EMIT_LOC_STRINGS: YES
+    dependencies:
+      - package: swift-markdown-ui
+        product: MarkdownUI
+
+schemes:
+  AgentCockpit:
+    build:
+      targets:
+        AgentCockpit: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    archive:
+      config: Release
