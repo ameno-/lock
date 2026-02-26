@@ -5,8 +5,7 @@
 AgentCockpit is a mobile cockpit for coding agents.
 
 - iOS app: `AgentCockpit/`
-- Legacy gateway: `gateway/`
-- Protocol modes in app: `gateway_legacy`, `acp`, `codex`
+- Protocol modes in app: `acp`, `codex`
 
 ## Development rules
 
@@ -16,7 +15,6 @@ AgentCockpit is a mobile cockpit for coding agents.
   - websocket transport (`ACGatewayConnection`)
   - request/response service (`ACSessionTransport`)
   - event mapping (`AppModel` + parser/adapters)
-- Preserve legacy gateway mode while adding ACP/Codex behavior.
 
 ## High-value paths
 
@@ -25,17 +23,12 @@ AgentCockpit is a mobile cockpit for coding agents.
 - `AgentCockpit/Core/Connection/ACSessionTransport.swift`
 - `AgentCockpit/Core/AppModel.swift`
 - `AgentCockpit/EventParsing/*`
-- `gateway/src/*`
 
 ## Validation
 
 - iOS build:
 ```bash
 flowdeck build -w AgentCockpit.xcodeproj -s AgentCockpit -S "iPhone 17"
-```
-- Gateway typecheck/build:
-```bash
-cd gateway && npm run build
 ```
 
 ## Landing the Plane (Session Completion)

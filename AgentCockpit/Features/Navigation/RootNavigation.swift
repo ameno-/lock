@@ -1,8 +1,13 @@
-// RootNavigation.swift — TabView (iPhone) + NavigationSplitView (iPad)
+// RootNavigation.swift — Agmente-style session-first navigation
 import SwiftUI
+
+private enum PhoneRoute: Hashable {
+    case session
+}
 
 struct RootNavigation: View {
     @Environment(AppModel.self) private var appModel
+    @State private var phonePath: [PhoneRoute] = []
 
     var body: some View {
         if UIDevice.current.userInterfaceIdiom == .pad {
@@ -12,13 +17,10 @@ struct RootNavigation: View {
         }
     }
 
-    // MARK: - iPad: NavigationSplitView (AIs sidebar + Work detail)
-
     private var iPadLayout: some View {
-        @Bindable var model = appModel
-        return NavigationSplitView {
+        NavigationSplitView {
             AIsView(appModel: appModel)
-                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 420)
         } detail: {
             NavigationStack {
                 WorkView(appModel: appModel)
@@ -36,42 +38,31 @@ struct RootNavigation: View {
         }
     }
 
-    // MARK: - iPhone: TabView (Home | Work | AIs)
-
     private var iPhoneLayout: some View {
-        @Bindable var model = appModel
-        return TabView(selection: $model.selectedTab) {
-            HomeView()
-                .environment(appModel)
-                .tabItem {
-                    Label("Home", systemImage: "house")
-                }
-                .tag(AppTab.home)
-
-            NavigationStack {
-                WorkView(appModel: appModel)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            NavigationLink {
-                                SettingsView()
-                                    .environment(appModel)
-                            } label: {
-                                Image(systemName: "gear")
-                            }
-                        }
-                    }
-            }
-            .tabItem {
-                Label("Work", systemImage: "terminal")
-            }
-            .tag(AppTab.work)
-
+        NavigationStack(path: $phonePath) {
             AIsView(appModel: appModel)
-                .environment(appModel)
-                .tabItem {
-                    Label("AIs", systemImage: "brain")
+                .navigationDestination(for: PhoneRoute.self) { route in
+                    switch route {
+                    case .session:
+                        WorkView(appModel: appModel)
+                            .toolbar {
+                                ToolbarItem(placement: .navigationBarTrailing) {
+                                    NavigationLink {
+                                        SettingsView()
+                                            .environment(appModel)
+                                    } label: {
+                                        Image(systemName: "gear")
+                                    }
+                                }
+                            }
+                    }
                 }
-                .tag(AppTab.ais)
+                .onChange(of: appModel.promotedSessionKey) { _, newValue in
+                    guard newValue != nil else { return }
+                    if phonePath.last != .session {
+                        phonePath.append(.session)
+                    }
+                }
         }
     }
 }

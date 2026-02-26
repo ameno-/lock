@@ -35,6 +35,14 @@ final class WorkViewModel {
         appModel.connection.state
     }
 
+    var pendingApprovalRequests: [ACPendingApprovalRequest] {
+        appModel.pendingApprovalRequests
+    }
+
+    var pendingUserInputRequests: [ACPendingUserInputRequest] {
+        appModel.pendingUserInputRequests
+    }
+
     var snippetCategories: [SnippetCategory] {
         SnippetLoader.shared.categories
     }
@@ -70,6 +78,18 @@ final class WorkViewModel {
         Task {
             try? await appModel.transport.send(sessionKey: key, text: "\u{03}") // Ctrl-C
         }
+    }
+
+    func decideApproval(requestID: String, decision: ACApprovalDecision) {
+        appModel.respondToApprovalRequest(id: requestID, decision: decision)
+    }
+
+    func submitUserInput(requestID: String, answers: [String: [String]]) {
+        appModel.submitUserInputRequest(id: requestID, answers: answers)
+    }
+
+    func dismissUserInput(requestID: String) {
+        appModel.dismissUserInputRequest(id: requestID)
     }
 
     func subscribeToActive() {

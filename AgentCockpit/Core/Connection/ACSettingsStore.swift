@@ -12,6 +12,8 @@ public final class ACSettingsStore {
         static let protocolMode = "agentcockpit.gateway.protocol"
         static let workingDirectory = "agentcockpit.gateway.workingDirectory"
         static let bonjourEnabled = "agentcockpit.bonjour.enabled"
+        static let cfAccessClientId = "agentcockpit.auth.cfAccessClientId"
+        static let cfAccessClientSecret = "agentcockpit.auth.cfAccessClientSecret"
     }
 
     public var host: String {
@@ -50,6 +52,28 @@ public final class ACSettingsStore {
     public var workingDirectory: String {
         get { UserDefaults.standard.string(forKey: Keys.workingDirectory) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: Keys.workingDirectory) }
+    }
+
+    public var authToken: String {
+        get { ACKeychainStore.loadToken() ?? "" }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                ACKeychainStore.deleteToken()
+            } else {
+                try? ACKeychainStore.saveToken(trimmed)
+            }
+        }
+    }
+
+    public var cfAccessClientId: String {
+        get { UserDefaults.standard.string(forKey: Keys.cfAccessClientId) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.cfAccessClientId) }
+    }
+
+    public var cfAccessClientSecret: String {
+        get { UserDefaults.standard.string(forKey: Keys.cfAccessClientSecret) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.cfAccessClientSecret) }
     }
 
     public var bonjourEnabled: Bool {

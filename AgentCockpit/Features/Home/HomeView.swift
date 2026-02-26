@@ -11,7 +11,7 @@ struct HomeView: View {
                     // Connection card
                     CardBase {
                         VStack(alignment: .leading, spacing: 12) {
-                            CardHeader(icon: "📡", title: "Gateway")
+                            CardHeader(icon: "📡", title: "Endpoint")
                             StatusPill(state: appModel.connection.state)
                             Text(appModel.settings.serverProtocol.displayName)
                                 .font(.caption2.weight(.semibold))

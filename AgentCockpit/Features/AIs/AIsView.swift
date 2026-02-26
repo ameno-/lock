@@ -1,4 +1,4 @@
-// AIsView.swift — Agent session list with polling
+// AIsView.swift — Agmente-style session index with session-first workflow
 import SwiftUI
 
 struct AIsView: View {
@@ -10,59 +10,54 @@ struct AIsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.sessions.isEmpty && !viewModel.isLoading {
-                    ContentUnavailableView {
-                        Label("No Sessions", systemImage: "terminal")
-                    } description: {
-                        Text(emptyDescription)
-                    }
-                } else {
-                    List(viewModel.sessions) { session in
-                        let isPromoted = appModel.promotedSessionKey == session.key
-                        let summary = viewModel.rowSummary(for: session, isPromoted: isPromoted)
-                        HStack(spacing: 10) {
+        Group {
+            if viewModel.sessions.isEmpty && !viewModel.isLoading {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(viewModel.sessions) { session in
+                            let isPromoted = appModel.promotedSessionKey == session.key
+                            let summary = viewModel.rowSummary(for: session, isPromoted: isPromoted)
                             Button {
                                 viewModel.promote(session: session)
                             } label: {
                                 AgentRowView(summary: summary)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                             .buttonStyle(.plain)
-
-                            NavigationLink {
-                                AgentDetailView(session: session)
-                                    .environment(appModel)
-                            } label: {
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
+                            .contextMenu {
+                                Button("Open Session") {
+                                    viewModel.promote(session: session)
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
-                    .listStyle(.plain)
-                    .refreshable { await viewModel.refresh() }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
+                .refreshable { await viewModel.refresh() }
             }
-            .navigationTitle("AIs")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        Task { await viewModel.createSession() }
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Create Session")
+        }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .navigationTitle("Sessions")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                StatusPill(state: appModel.connection.state)
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await viewModel.createSession() }
+                } label: {
+                    Image(systemName: "plus")
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    StatusPill(state: appModel.connection.state)
-                }
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if viewModel.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    }
+                .accessibilityLabel("Create Session")
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink {
+                    SettingsView()
+                        .environment(appModel)
+                } label: {
+                    Image(systemName: "gearshape")
                 }
             }
         }
@@ -78,14 +73,25 @@ struct AIsView: View {
         }
     }
 
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("No Sessions", systemImage: "ellipsis.message")
+        } description: {
+            Text(emptyDescription)
+        } actions: {
+            Button("Create Session") {
+                Task { await viewModel.createSession() }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
     private var emptyDescription: String {
         switch appModel.settings.serverProtocol {
-        case .gatewayLegacy:
-            "No tmux sessions found.\nStart a Claude Code session on your VPS."
         case .acp:
-            "No ACP sessions found.\nCreate one with + or start one on your ACP server."
+            "No ACP sessions found. Create one with + or start one on your ACP server."
         case .codex:
-            "No Codex threads found.\nCreate one with + or resume an existing thread."
+            "No Codex threads found. Create one with + or resume an existing thread."
         }
     }
 }

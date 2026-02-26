@@ -202,6 +202,8 @@ public final class AgentEventStore {
             raw = (e.result?.isEmpty == false ? e.result : nil) ?? e.input
         case .fileEdit(let e):
             raw = "\(e.operation.label): \(e.filePath)"
+        case .genUI(let e):
+            raw = "\(e.title): \(e.body)"
         case .gitDiff(let e):
             raw = e.filePath ?? "Git diff updated"
         case .subAgent(let e):

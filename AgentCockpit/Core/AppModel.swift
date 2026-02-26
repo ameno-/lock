@@ -14,6 +14,28 @@ public final class AppModel {
     public var promotedSessionKey: String? = nil
     public var selectedTab: AppTab = .work
 
+    // MARK: - Pending interaction requests
+
+    public var pendingApprovalRequests: [ACPendingApprovalRequest] {
+        transport.pendingApprovalRequests
+    }
+
+    public var pendingUserInputRequests: [ACPendingUserInputRequest] {
+        transport.pendingUserInputRequests
+    }
+
+    public func respondToApprovalRequest(id: String, decision: ACApprovalDecision) {
+        transport.respondToApprovalRequest(id: id, decision: decision)
+    }
+
+    public func submitUserInputRequest(id: String, answers: [String: [String]]) {
+        transport.submitUserInputRequest(id: id, answers: answers)
+    }
+
+    public func dismissUserInputRequest(id: String) {
+        transport.dismissUserInputRequest(id: id)
+    }
+
     public init() {
         let conn = ACGatewayConnection(settings: settings)
         self.connection = conn
@@ -177,9 +199,8 @@ public final class AppModel {
 }
 
 public enum AppTab: Hashable {
-    case home
+    case sessions
     case work
-    case ais
 }
 
 private enum JSONRPCEventAdapter {
@@ -190,8 +211,6 @@ private enum JSONRPCEventAdapter {
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         switch protocolMode {
-        case .gatewayLegacy:
-            return nil
         case .acp:
             return mapACP(method: method, params: params, fallbackSessionKey: fallbackSessionKey)
         case .codex:
@@ -212,15 +231,31 @@ private enum JSONRPCEventAdapter {
             ?? update["sessionId"]?.stringValue
             ?? fallbackSessionKey
             ?? "acp"
-        let kind = update["kind"]?.stringValue ?? update["type"]?.stringValue ?? "session/update"
+        let kind = update["sessionUpdate"]?.stringValue
+            ?? update["kind"]?.stringValue
+            ?? update["type"]?.stringValue
+            ?? "session/update"
+
+        if let event = parseGenUIEvent(
+            payload: update,
+            protocolPrefix: "acp",
+            sessionKey: sessionKey,
+            fallbackID: firstNonEmpty(update["id"]?.stringValue, root["requestId"]?.stringValue),
+            fallbackTitle: "ACP GenUI"
+        ) {
+            return (sessionKey, .genUI(event))
+        }
+
+        if kind.contains("session_info_update") {
+            return nil
+        }
 
         if kind.contains("tool_call_update") {
             let toolName = update["toolName"]?.stringValue
+                ?? update["title"]?.stringValue
                 ?? update["tool"]?.dictValue?["name"]?.stringValue
                 ?? "Tool"
-            let resultText = update["output"]?.stringValue
-                ?? update["result"]?.stringValue
-                ?? update["message"]?.stringValue
+            let resultText = sessionUpdateText(from: update)
                 ?? compactJSONString(from: update)
             let toolID = toolEventID(
                 protocolPrefix: "acp",
@@ -249,11 +284,19 @@ private enum JSONRPCEventAdapter {
 
         if kind.contains("tool_call") {
             let toolName = update["toolName"]?.stringValue
+                ?? update["title"]?.stringValue
                 ?? update["tool"]?.dictValue?["name"]?.stringValue
                 ?? "Tool"
-            let inputText = update["input"]?.stringValue
-                ?? update["arguments"]?.stringValue
-                ?? compactJSONString(from: update["arguments"]?.dictValue ?? [:])
+            let inputText: String = {
+                if let parsed = sessionUpdateText(from: update), !parsed.isEmpty {
+                    return parsed
+                }
+                let rawInput = compactJSONString(from: update["rawInput"]?.dictValue ?? [:])
+                if !rawInput.isEmpty {
+                    return rawInput
+                }
+                return compactJSONString(from: update["arguments"]?.dictValue ?? [:])
+            }()
             let toolID = toolEventID(
                 protocolPrefix: "acp",
                 sessionKey: sessionKey,
@@ -278,11 +321,28 @@ private enum JSONRPCEventAdapter {
             )
         }
 
+        if kind.contains("user_message") {
+            let text = sessionUpdateText(from: update) ?? compactJSONString(from: update)
+            guard !text.isEmpty else { return nil }
+            let eventID = firstNonEmpty(
+                update["id"]?.stringValue,
+                update["messageId"]?.stringValue,
+                update["message_id"]?.stringValue
+            ) ?? UUID().uuidString
+            return (
+                sessionKey,
+                .rawOutput(
+                    RawOutputEvent(
+                        id: "acp/\(sessionKey)/user/\(eventID)",
+                        text: "You: \(text)",
+                        hookEvent: method
+                    )
+                )
+            )
+        }
+
         if kind.contains("agent_message") || kind.contains("agent_thought") {
-            let text = update["text"]?.stringValue
-                ?? update["delta"]?.stringValue
-                ?? update["content"]?.stringValue
-                ?? update["message"]?.stringValue
+            let text = sessionUpdateText(from: update)
                 ?? compactJSONString(from: update)
             guard !text.isEmpty else { return nil }
             let eventID = reasoningEventID(
@@ -303,8 +363,7 @@ private enum JSONRPCEventAdapter {
                     root["turnId"]?.stringValue,
                     root["turn_id"]?.stringValue
                 ),
-                fallback: kind,
-                allowFallbackMerge: false
+                fallback: kind
             )
             return (
                 sessionKey,
@@ -364,6 +423,16 @@ private enum JSONRPCEventAdapter {
                 return (sessionKey, .rawOutput(RawOutputEvent(text: method, hookEvent: method)))
             }
             let itemType = item["type"]?.stringValue ?? "item"
+
+            if let event = parseGenUIEvent(
+                payload: item,
+                protocolPrefix: "codex",
+                sessionKey: sessionKey,
+                fallbackID: firstNonEmpty(item["id"]?.stringValue, root["itemId"]?.stringValue),
+                fallbackTitle: "Codex GenUI"
+            ) {
+                return (sessionKey, .genUI(event))
+            }
 
             if itemType == "userMessage" {
                 let text = userMessageText(from: item)
@@ -528,6 +597,18 @@ private enum JSONRPCEventAdapter {
         case "turn/started", "turn/completed", "thread/started", "thread/status/changed", "thread/tokenUsage/updated":
             return nil
 
+        case "genui/update", "gen_ui/update":
+            if let event = parseGenUIEvent(
+                payload: root,
+                protocolPrefix: "codex",
+                sessionKey: sessionKey,
+                fallbackID: firstNonEmpty(root["id"]?.stringValue, root["requestId"]?.stringValue),
+                fallbackTitle: "GenUI"
+            ) {
+                return (sessionKey, .genUI(event))
+            }
+            return nil
+
         default:
             return nil
         }
@@ -539,6 +620,59 @@ private enum JSONRPCEventAdapter {
             if !parts.isEmpty { return parts.joined(separator: " ") }
         }
         return item["command"]?.stringValue ?? "command"
+    }
+
+    private static func sessionUpdateText(from update: [String: AnyCodable]) -> String? {
+        let direct = firstNonEmpty(
+            update["text"]?.stringValue,
+            update["delta"]?.stringValue,
+            update["output"]?.stringValue,
+            update["result"]?.stringValue,
+            update["message"]?.stringValue,
+            update["input"]?.stringValue,
+            update["arguments"]?.stringValue
+        )
+        if let direct, !direct.isEmpty {
+            return direct
+        }
+
+        if let contentObject = update["content"]?.dictValue {
+            if let nested = firstNonEmpty(
+                contentObject["text"]?.stringValue,
+                contentObject["value"]?.stringValue
+            ), !nested.isEmpty {
+                return nested
+            }
+            if let nestedContent = contentObject["content"]?.dictValue,
+               let nested = firstNonEmpty(
+                   nestedContent["text"]?.stringValue,
+                   nestedContent["value"]?.stringValue
+               ), !nested.isEmpty {
+                return nested
+            }
+        }
+
+        if let contentArray = update["content"]?.arrayValue {
+            let parts = contentArray.compactMap { entry -> String? in
+                if let s = entry.stringValue, !s.isEmpty { return s }
+                guard let dict = entry.dictValue else { return nil }
+                if let text = dict["text"]?.stringValue, !text.isEmpty { return text }
+                if let nested = dict["content"]?.dictValue?["text"]?.stringValue, !nested.isEmpty {
+                    return nested
+                }
+                return nil
+            }
+            if !parts.isEmpty {
+                return parts.joined(separator: "\n")
+            }
+        }
+
+        if let inputObject = update["rawInput"]?.dictValue {
+            let compact = compactJSONString(from: inputObject)
+            if !compact.isEmpty { return compact }
+        }
+
+        return nil
     }
 
     private static func userMessageText(from item: [String: AnyCodable]) -> String {
@@ -648,5 +782,61 @@ private enum JSONRPCEventAdapter {
         if let d = value.doubleValue { return d }
         if let i = value.intValue { return i }
         return value.description
+    }
+
+    private static func parseGenUIEvent(
+        payload: [String: AnyCodable],
+        protocolPrefix: String,
+        sessionKey: String,
+        fallbackID: String?,
+        fallbackTitle: String
+    ) -> GenUIEvent? {
+        let explicit = payload["genUI"]?.dictValue
+            ?? payload["gen_ui"]?.dictValue
+            ?? payload["surfaceSpec"]?.dictValue
+            ?? payload["surface_spec"]?.dictValue
+        let marker = payload["kind"]?.stringValue
+            ?? payload["type"]?.stringValue
+            ?? payload["sessionUpdate"]?.stringValue
+
+        guard explicit != nil || marker?.localizedCaseInsensitiveContains("genui") == true else {
+            return nil
+        }
+
+        let ui = explicit ?? payload
+        let identifier = firstNonEmpty(
+            ui["id"]?.stringValue,
+            ui["surfaceId"]?.stringValue,
+            fallbackID
+        ) ?? UUID().uuidString
+        let title = firstNonEmpty(
+            ui["title"]?.stringValue,
+            ui["name"]?.stringValue,
+            marker,
+            fallbackTitle
+        ) ?? fallbackTitle
+        let body = firstNonEmpty(
+            ui["text"]?.stringValue,
+            ui["body"]?.stringValue,
+            ui["description"]?.stringValue,
+            compactJSONString(from: ui)
+        ) ?? ""
+
+        let actionLabel = firstNonEmpty(
+            ui["actionLabel"]?.stringValue,
+            ui["action"]?.dictValue?["label"]?.stringValue,
+            ui["primaryAction"]?.dictValue?["label"]?.stringValue
+        )
+        let actionPayload = ui["action"]?.dictValue
+            ?? ui["primaryAction"]?.dictValue
+            ?? [:]
+
+        return GenUIEvent(
+            id: "\(protocolPrefix)/\(sessionKey)/genui/\(identifier)",
+            title: title,
+            body: body,
+            actionLabel: actionLabel,
+            actionPayload: actionPayload
+        )
     }
 }

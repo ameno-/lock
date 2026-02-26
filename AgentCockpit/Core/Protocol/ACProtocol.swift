@@ -5,13 +5,11 @@ import Foundation
 // MARK: - Endpoint protocol mode
 
 public enum ACServerProtocol: String, Codable, CaseIterable, Sendable {
-    case gatewayLegacy = "gateway_legacy"
     case acp = "acp"
     case codex = "codex"
 
     public var displayName: String {
         switch self {
-        case .gatewayLegacy: return "AgentCockpit Gateway"
         case .acp: return "ACP"
         case .codex: return "Codex App Server"
         }
@@ -164,6 +162,7 @@ public struct ACSessionEntry: Sendable, Identifiable {
     public let running: Bool
     public let promoted: Bool
     public let createdAt: Date
+    public let cwd: String?
     public let preview: String?
     public let statusText: String?
     public let updatedAt: Date?
@@ -176,6 +175,7 @@ public struct ACSessionEntry: Sendable, Identifiable {
         running: Bool,
         promoted: Bool,
         createdAt: Date,
+        cwd: String? = nil,
         preview: String? = nil,
         statusText: String? = nil,
         updatedAt: Date? = nil
@@ -187,6 +187,7 @@ public struct ACSessionEntry: Sendable, Identifiable {
         self.running = running
         self.promoted = promoted
         self.createdAt = createdAt
+        self.cwd = cwd
         self.preview = preview
         self.statusText = statusText
         self.updatedAt = updatedAt
@@ -362,6 +363,7 @@ public enum ACMessageParser {
             running: dict["running"] as? Bool ?? true,
             promoted: dict["promoted"] as? Bool ?? false,
             createdAt: Date(timeIntervalSince1970: createdMs / 1000),
+            cwd: dict["cwd"] as? String ?? dict["workingDirectory"] as? String,
             preview: dict["preview"] as? String,
             statusText: dict["status"] as? String,
             updatedAt: updatedMs.map { Date(timeIntervalSince1970: $0 / 1000) }

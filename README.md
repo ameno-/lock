@@ -2,9 +2,8 @@
 
 AgentCockpit is an iPhone/iPad cockpit for coding agents.
 
-As of February 26, 2026, this repo supports three endpoint modes from the iOS app:
+As of February 26, 2026, this repo supports two endpoint modes from the iOS app:
 
-- `AgentCockpit Gateway` (legacy custom protocol)
 - `ACP` (JSON-RPC over WebSocket)
 - `Codex App Server` (JSON-RPC over WebSocket)
 
@@ -20,34 +19,16 @@ This project is optimized for mobile access to active coding sessions:
 ## Architecture
 
 - `AgentCockpit/`: SwiftUI iOS app
-- `gateway/`: TypeScript gateway that ingests hook events and exposes WS to the app
 
 ### iOS connection stack
 
 - `ACSettingsStore`: endpoint mode + URL config (`ws`/`wss`, host, port, path)
-- `ACGatewayConnection`: websocket lifecycle + reconnect
-- `ACSessionTransport`: request/response methods for legacy, ACP, Codex
-- `AppModel`: routes legacy events and JSON-RPC notifications into UI event store
-
-### Gateway stack
-
-- `/hook` receiver for Claude-style hook payloads
-- in-memory session registry + event router
-- websocket client handler for legacy custom protocol
+- `ACGatewayConnection`: websocket lifecycle + reconnect + auth headers
+- `ACSessionTransport`: request/response service for ACP/Codex, session hydration, server-request replies
+- `AppModel`: JSON-RPC notification mapping into `CanvasEvent`
+- `AgentEventStore`: per-session event state, digest metadata, token/status overlays
 
 ## Quick start
-
-### Legacy gateway mode
-
-1. Start gateway:
-```bash
-docker compose up --build
-```
-2. Launch iOS app and set:
-- Protocol: `AgentCockpit Gateway`
-- Scheme: `ws`
-- Host/Port: gateway endpoint
-- Token: value matching `AGENTCOCKPIT_TOKEN`
 
 ### Direct ACP mode
 
@@ -55,7 +36,7 @@ docker compose up --build
 2. In iOS settings set:
 - Protocol: `ACP`
 - Scheme/Host/Port/Path: ACP endpoint
-- Optional Working Dir
+- Working Dir: required for ACP servers that require absolute cwd on `session/new`/`session/load` (for example `pi-acp`)
 
 ### Direct Codex app-server mode
 
@@ -69,16 +50,15 @@ docker compose up --build
 
 | Capability | AgentCockpit (this repo) | Agmente |
 |---|---|---|
-| Multi-protocol endpoint support | Legacy + ACP + Codex mode selector in app settings | ACP + Codex with dynamic runtime switching |
+| Multi-protocol endpoint support | ACP + Codex mode selector in app settings | ACP + Codex with dynamic runtime switching |
 | Transport | WebSocket (`ws`/`wss`) | WebSocket (`ws`/`wss`) |
-| JSON-RPC support | Minimal request/response/notification/request parsing | Full typed JSON-RPC service layers |
-| ACP lifecycle | `initialize` + `initialized`, `session/new`, `session/list`, `session/prompt` (minimal) | Broad ACP method/event support including permission, fs, terminal |
-| Codex lifecycle | `initialize` + `initialized`, `thread/start`, `thread/list`, `turn/start` (minimal) | Broad Codex surface (`thread/*`, `turn/*`, `item/*`, config, model, skills, account, approvals) |
-| Server-initiated requests | Auto-response for approval/user-input request methods (minimal fallback) | Structured handling of approval and user-input flows |
-| Event rendering | Unified card canvas with tool/reasoning/git/file/subagent/raw cards | Rich transcript model with protocol-specific mapping and diffing |
-| Session/thread creation | Create from AIs tab (`+`) in ACP/Codex modes | Full create/resume/list/load flows with persistence |
-| Persistence | In-memory event/session state | Persistent server/session/message strategies with protocol fallbacks |
-| Remote hardening | Token auth in legacy mode; endpoint configurable | Bearer + optional Cloudflare Access headers |
+| JSON-RPC support | Request/response + notifications + server-initiated requests | Full typed JSON-RPC service layers |
+| ACP lifecycle | `initialize`, `session/new`, `session/list`, `session/prompt`, `session/load/session/resume` fallback | Broad ACP method/event support including permission, fs, terminal |
+| Codex lifecycle | `initialize`, `thread/start/list/read/resume`, `turn/start` | Broad Codex surface (`thread/*`, `turn/*`, `item/*`, config, model, skills, account, approvals) |
+| Server-initiated requests | Interactive approval + user-input queues with explicit responses | Structured handling of approval and user-input flows |
+| Event rendering | Agmente-style session-first UI + canvas cards (tool/reasoning/git/file/subagent/raw/genui) | Rich transcript model with protocol-specific mapping and diffing |
+| Session summaries | Includes protocol label, status, token usage, activity, cwd/location | Rich thread/session metadata parsing and persistence |
+| Remote hardening | Bearer + optional Cloudflare Access headers | Bearer + optional Cloudflare Access headers |
 
 ## Blueprint: combine AgentCockpit + Agmente strengths
 
@@ -87,26 +67,28 @@ Use ACP as the alignment contract and preserve a small mobile UX footprint:
 1. Keep one mobile UI surface.
 2. Add protocol runtime adapters behind a shared JSON-RPC core.
 3. Normalize ACP/Codex updates into a shared render model.
-4. Preserve legacy gateway mode for hook-stream deployments.
-5. Expand from minimal method coverage to full ACP/Codex parity incrementally.
+4. Expand from current method coverage to full ACP/Codex parity incrementally.
 
 ## Minimal MVP scope (phone/iPad first)
 
 Implemented in this iteration:
 
 - iOS17-compatible build baseline fixed
-- endpoint protocol mode setting (`Gateway`/`ACP`/`Codex`)
+- endpoint protocol mode setting (`ACP`/`Codex`)
 - JSON-RPC transport plumbing in app
-- basic ACP and Codex request flows for session/thread creation, list, prompt/turn
-- minimal JSON-RPC event mapping into existing canvas cards
-- fallback auto-replies for approval-type server requests
+- ACP and Codex request flows for session/thread creation, list, hydration, prompt/turn
+- session-first Agmente-style mobile navigation and cards
+- explicit approval and request-user-input handling in Work view
+- GenUI event routing + renderer card scaffold
+- ACP session list parsing hardening (`id/title/cwd/timestamps` variants)
+- auth header support (Bearer + Cloudflare Access)
 
 Recommended next increments:
 
-1. Complete typed ACP event parser (`session/update` variants).
-2. Add Codex thread hydration (`thread/read`/`thread/resume` + listener patterns).
-3. Add explicit approval UI instead of auto-replies.
-4. Add persisted local session/thread index for offline continuity.
+1. Complete typed ACP `session/update` mapping for all tool/result metadata variants.
+2. Add persisted local session/thread index for reconnect/offline continuity.
+3. Add protocol fixtures and e2e verification gates for ACP/Codex/`pi-acp`.
+4. Expand GenUI contract validation and action callback coverage.
 
 ## External references
 

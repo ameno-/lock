@@ -8,6 +8,7 @@ public enum CanvasEvent: Identifiable, Sendable {
     case subAgent(SubAgentEvent)
     case skillRun(SkillRunEvent)
     case fileEdit(FileEditEvent)
+    case genUI(GenUIEvent)
     case rawOutput(RawOutputEvent)
 
     public var id: String {
@@ -18,6 +19,7 @@ public enum CanvasEvent: Identifiable, Sendable {
         case .subAgent(let e): return e.id
         case .skillRun(let e): return e.id
         case .fileEdit(let e): return e.id
+        case .genUI(let e): return e.id
         case .rawOutput(let e): return e.id
         }
     }
@@ -30,6 +32,7 @@ public enum CanvasEvent: Identifiable, Sendable {
         case .subAgent(let e): return e.timestamp
         case .skillRun(let e): return e.timestamp
         case .fileEdit(let e): return e.timestamp
+        case .genUI(let e): return e.timestamp
         case .rawOutput(let e): return e.timestamp
         }
     }
@@ -214,6 +217,33 @@ public enum FileOperation: Sendable {
     case write
     case edit
     case delete
+}
+
+// MARK: - GenUI
+
+public struct GenUIEvent: Sendable {
+    public let id: String
+    public let title: String
+    public let body: String
+    public let actionLabel: String?
+    public let actionPayload: [String: AnyCodable]
+    public let timestamp: Date
+
+    public init(
+        id: String = UUID().uuidString,
+        title: String,
+        body: String,
+        actionLabel: String? = nil,
+        actionPayload: [String: AnyCodable] = [:],
+        timestamp: Date = .now
+    ) {
+        self.id = id
+        self.title = title
+        self.body = body
+        self.actionLabel = actionLabel
+        self.actionPayload = actionPayload
+        self.timestamp = timestamp
+    }
 }
 
 // MARK: - Raw Output (fallback)

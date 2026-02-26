@@ -1,17 +1,65 @@
 // ACSessionTransport.swift — Typed request/response methods across legacy gateway, ACP, and Codex app-server
 import Foundation
 
+public enum ACApprovalDecision: String, CaseIterable, Sendable {
+    case accept
+    case acceptForSession
+    case decline
+    case cancel
+}
+
+public struct ACPendingApprovalRequest: Identifiable, Sendable {
+    public let id: String
+    public let method: String
+    public let threadId: String?
+    public let turnId: String?
+    public let itemId: String?
+    public let reason: String?
+    public let command: String?
+    public let cwd: String?
+    public let grantRoot: String?
+    public let receivedAt: Date
+}
+
+public struct ACUserInputOption: Identifiable, Sendable {
+    public let id: String
+    public let label: String
+    public let details: String?
+    public let isOther: Bool
+    public let isSecret: Bool
+}
+
+public struct ACUserInputQuestion: Identifiable, Sendable {
+    public let id: String
+    public let header: String
+    public let prompt: String
+    public let options: [ACUserInputOption]
+    public let allowsMultipleSelections: Bool
+}
+
+public struct ACPendingUserInputRequest: Identifiable, Sendable {
+    public let id: String
+    public let method: String
+    public let threadId: String?
+    public let turnId: String?
+    public let questions: [ACUserInputQuestion]
+    public let receivedAt: Date
+}
+
 @Observable
 @MainActor
 public final class ACSessionTransport {
     private let connection: ACGatewayConnection
     private let settings: ACSettingsStore
 
-    private var pendingLegacyRequests: [String: CheckedContinuation<ACResult, Error>] = [:]
     private var pendingJSONRequests: [String: CheckedContinuation<AnyCodable?, Error>] = [:]
     private var requestCounter = 0
     private var didInitializeJSONRPC = false
+    private var loadedACPSessionIDs: Set<String> = []
     private var loadedCodexThreadIDs: Set<String> = []
+    private var acpSessionDirectories: [String: String] = [:]
+    public private(set) var pendingApprovalRequests: [ACPendingApprovalRequest] = []
+    public private(set) var pendingUserInputRequests: [ACPendingUserInputRequest] = []
 
     public init(connection: ACGatewayConnection, settings: ACSettingsStore) {
         self.connection = connection
@@ -20,17 +68,14 @@ public final class ACSessionTransport {
 
     public func resetConnectionLifecycle() {
         didInitializeJSONRPC = false
+        loadedACPSessionIDs.removeAll()
         loadedCodexThreadIDs.removeAll()
+        acpSessionDirectories.removeAll()
     }
 
     // Called by AppModel when a message arrives
     public func handleMessage(_ msg: ACServerMessage) {
         switch msg {
-        case .response(let id, let result):
-            if let continuation = pendingLegacyRequests.removeValue(forKey: id) {
-                continuation.resume(returning: result)
-            }
-
         case .jsonrpcResponse(let id, let result, let error):
             if let continuation = pendingJSONRequests.removeValue(forKey: id) {
                 if let error {
@@ -48,13 +93,32 @@ public final class ACSessionTransport {
     public func handleServerRequest(id: String, method: String, params: [String: AnyCodable]?) {
         switch method {
         case "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
-            connection.send(ACJSONRPCResponseMessage(id: id, result: AnyCodable("accept")))
+            let root = params ?? [:]
+            let approval = ACPendingApprovalRequest(
+                id: id,
+                method: method,
+                threadId: root["threadId"]?.stringValue,
+                turnId: root["turnId"]?.stringValue,
+                itemId: root["itemId"]?.stringValue,
+                reason: root["reason"]?.stringValue,
+                command: commandText(from: root),
+                cwd: root["cwd"]?.stringValue,
+                grantRoot: root["grantRoot"]?.stringValue,
+                receivedAt: .now
+            )
+            upsertApprovalRequest(approval)
 
         case "item/tool/requestUserInput", "tool/requestUserInput":
-            let result: [String: AnyCodable] = [
-                "answers": AnyCodable([String: AnyCodable]())
-            ]
-            connection.send(ACJSONRPCResponseMessage(id: id, result: AnyCodable(result)))
+            let root = params ?? [:]
+            let request = ACPendingUserInputRequest(
+                id: id,
+                method: method,
+                threadId: root["threadId"]?.stringValue,
+                turnId: root["turnId"]?.stringValue,
+                questions: parseUserInputQuestions(from: root),
+                receivedAt: .now
+            )
+            upsertUserInputRequest(request)
 
         default:
             let error = ACJSONRPCErrorPayload(code: -32601, message: "Method not handled in AgentCockpit")
@@ -62,19 +126,52 @@ public final class ACSessionTransport {
         }
     }
 
+    public func respondToApprovalRequest(id: String, decision: ACApprovalDecision) {
+        let payload = AnyCodable(decision.rawValue)
+        connection.send(ACJSONRPCResponseMessage(id: id, result: payload))
+        pendingApprovalRequests.removeAll { $0.id == id }
+    }
+
+    public func submitUserInputRequest(id: String, answers: [String: [String]]) {
+        var answersPayload: [String: AnyCodable] = [:]
+        for (key, values) in answers {
+            answersPayload[key] = AnyCodable(values.map { AnyCodable($0) })
+        }
+        let result: [String: AnyCodable] = [
+            "answers": AnyCodable(answersPayload)
+        ]
+        connection.send(ACJSONRPCResponseMessage(id: id, result: AnyCodable(result)))
+        pendingUserInputRequests.removeAll { $0.id == id }
+    }
+
+    public func dismissUserInputRequest(id: String) {
+        let result: [String: AnyCodable] = [
+            "answers": AnyCodable([String: AnyCodable]())
+        ]
+        connection.send(ACJSONRPCResponseMessage(id: id, result: AnyCodable(result)))
+        pendingUserInputRequests.removeAll { $0.id == id }
+    }
+
     // MARK: - Public request methods
 
     public func listSessions() async throws -> [ACSessionEntry] {
         switch settings.serverProtocol {
-        case .gatewayLegacy:
-            let result = try await requestLegacy(method: "sessions.list")
-            if case .sessions(let sessions) = result { return sessions }
-            if case .error(let code, let msg) = result { throw ACTransportError.serverError(code, msg) }
-            return []
-
         case .acp:
-            let result = try await requestJSON(method: "session/list")
-            return parseACPSessions(from: result)
+            do {
+                let result = try await requestJSON(method: "session/list")
+                let sessions = parseACPSessions(from: result)
+                cacheACPSessionDirectories(from: sessions)
+                return sessions
+            } catch ACTransportError.serverError(let code, _) where code == -32601 {
+                do {
+                    let fallback = try await requestJSON(method: "session/resume/list")
+                    let sessions = parseACPSessions(from: fallback)
+                    cacheACPSessionDirectories(from: sessions)
+                    return sessions
+                } catch ACTransportError.serverError(let fallbackCode, _) where fallbackCode == -32601 {
+                    return []
+                }
+            }
 
         case .codex:
             let result = try await requestJSON(
@@ -87,19 +184,30 @@ public final class ACSessionTransport {
 
     public func createSession() async throws -> ACSessionEntry? {
         switch settings.serverProtocol {
-        case .gatewayLegacy:
-            return nil
-
         case .acp:
             var params: [String: AnyCodable] = [:]
             if !settings.workingDirectory.isEmpty {
                 params["cwd"] = AnyCodable(settings.workingDirectory)
             }
-            let result = try await requestJSON(
-                method: "session/new",
-                params: params.isEmpty ? nil : params
-            )
-            return parseACPSession(from: result)
+            do {
+                let result = try await requestJSON(
+                    method: "session/new",
+                    params: params.isEmpty ? nil : params
+                )
+                let created = parseACPSession(from: result)
+                if let created {
+                    cacheACPSessionDirectories(from: [created])
+                    loadedACPSessionIDs.insert(created.key)
+                }
+                return created
+            } catch ACTransportError.serverError(let code, let message)
+                where code == -32602 && settings.workingDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                throw ACTransportError.serverError(
+                    code,
+                    "Server rejected session/new (\(message)). Set an absolute Working Dir in Settings for ACP servers like pi-acp."
+                )
+            }
 
         case .codex:
             var params: [String: AnyCodable] = [:]
@@ -120,12 +228,8 @@ public final class ACSessionTransport {
 
     public func subscribe(sessionKey: String) async throws {
         switch settings.serverProtocol {
-        case .gatewayLegacy:
-            let result = try await requestLegacy(method: "session.subscribe", params: .sessionKey(sessionKey))
-            if case .error(let code, let msg) = result { throw ACTransportError.serverError(code, msg) }
-
         case .acp:
-            break
+            try await ensureACPSessionLoaded(sessionKey: sessionKey)
 
         case .codex:
             try await ensureCodexThreadResumed(sessionKey: sessionKey)
@@ -134,14 +238,8 @@ public final class ACSessionTransport {
 
     public func send(sessionKey: String, text: String) async throws {
         switch settings.serverProtocol {
-        case .gatewayLegacy:
-            let result = try await requestLegacy(
-                method: "session.send",
-                params: .sessionSend(sessionKey: sessionKey, text: text)
-            )
-            if case .error(let code, let msg) = result { throw ACTransportError.serverError(code, msg) }
-
         case .acp:
+            try await ensureACPSessionLoaded(sessionKey: sessionKey)
             let params: [String: AnyCodable] = [
                 "sessionId": AnyCodable(sessionKey),
                 "prompt": AnyCodable(text),
@@ -165,7 +263,8 @@ public final class ACSessionTransport {
 
     public func loadSessionContext(sessionKey: String) async throws -> [CanvasEvent] {
         switch settings.serverProtocol {
-        case .gatewayLegacy, .acp:
+        case .acp:
+            try await ensureACPSessionLoaded(sessionKey: sessionKey)
             return []
 
         case .codex:
@@ -182,34 +281,12 @@ public final class ACSessionTransport {
 
     public func promote(sessionKey: String) async throws {
         switch settings.serverProtocol {
-        case .gatewayLegacy:
-            let result = try await requestLegacy(method: "session.promote", params: .sessionKey(sessionKey))
-            if case .error(let code, let msg) = result { throw ACTransportError.serverError(code, msg) }
-
         case .acp, .codex:
             break
         }
     }
 
     // MARK: - Internal request helpers
-
-    private func requestLegacy(method: String, params: ACParams? = nil) async throws -> ACResult {
-        requestCounter += 1
-        let id = "req-\(requestCounter)"
-        let msg = ACRequestMessage(id: id, method: method, params: params)
-
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingLegacyRequests[id] = continuation
-            connection.send(msg)
-
-            Task { @MainActor in
-                try await Task.sleep(nanoseconds: 10_000_000_000)
-                if let c = self.pendingLegacyRequests.removeValue(forKey: id) {
-                    c.resume(throwing: ACTransportError.timeout(method))
-                }
-            }
-        }
-    }
 
     private func requestJSON(method: String, params: [String: AnyCodable]? = nil) async throws -> AnyCodable? {
         try await ensureJSONRPCInitializedIfNeeded()
@@ -239,7 +316,6 @@ public final class ACSessionTransport {
     }
 
     private func ensureJSONRPCInitializedIfNeeded() async throws {
-        guard settings.serverProtocol != .gatewayLegacy else { return }
         guard !didInitializeJSONRPC else { return }
 
         let clientInfo: [String: AnyCodable] = [
@@ -266,9 +342,6 @@ public final class ACSessionTransport {
                     "experimentalApi": AnyCodable(false)
                 ]),
             ]
-
-        case .gatewayLegacy:
-            [:]
         }
 
         _ = try await sendJSONRequest(method: "initialize", params: initParams)
@@ -277,6 +350,73 @@ public final class ACSessionTransport {
             connection.send(ACJSONRPCNotificationMessage(method: "notifications/initialized", params: [:]))
         }
         didInitializeJSONRPC = true
+    }
+
+    private func cacheACPSessionDirectories(from sessions: [ACSessionEntry]) {
+        for session in sessions {
+            guard let cwd = session.cwd?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !cwd.isEmpty
+            else { continue }
+            acpSessionDirectories[session.key] = cwd
+        }
+    }
+
+    private func resolvedACPCwd(for sessionKey: String) -> String? {
+        if let cached = acpSessionDirectories[sessionKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !cached.isEmpty {
+            return cached
+        }
+
+        let configured = settings.workingDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !configured.isEmpty else { return nil }
+        guard configured.hasPrefix("/") else { return nil }
+        return configured
+    }
+
+    private func ensureACPSessionLoaded(sessionKey: String) async throws {
+        guard settings.serverProtocol == .acp else { return }
+        guard !loadedACPSessionIDs.contains(sessionKey) else { return }
+
+        let cwd = resolvedACPCwd(for: sessionKey)
+        var baseParams: [String: AnyCodable] = ["sessionId": AnyCodable(sessionKey)]
+        if let cwd {
+            baseParams["cwd"] = AnyCodable(cwd)
+        }
+
+        let methods = ["session/load", "session/resume"]
+        var lastError: ACTransportError?
+        var sawKnownLoadMethod = false
+
+        for method in methods {
+            do {
+                _ = try await requestJSON(method: method, params: baseParams)
+                loadedACPSessionIDs.insert(sessionKey)
+                return
+            } catch ACTransportError.serverError(let code, _) where code == -32601 {
+                continue
+            } catch let error as ACTransportError {
+                sawKnownLoadMethod = true
+                lastError = error
+                continue
+            }
+        }
+
+        if !sawKnownLoadMethod {
+            loadedACPSessionIDs.insert(sessionKey)
+            return
+        }
+
+        if let lastError {
+            if case ACTransportError.serverError(let code, let message) = lastError,
+               code == -32602,
+               cwd == nil {
+                throw ACTransportError.serverError(
+                    code,
+                    "ACP load/resume requires an absolute cwd (\(message)). Set Working Dir in Settings."
+                )
+            }
+            throw lastError
+        }
     }
 
     private func ensureCodexThreadResumed(sessionKey: String) async throws {
@@ -305,30 +445,61 @@ public final class ACSessionTransport {
             candidates = arr
         }
 
-        return candidates.compactMap { candidate in
-            guard let session = candidate.dictValue else { return nil }
+        var parsed: [ACSessionEntry] = []
+        parsed.reserveCapacity(candidates.count)
+        for candidate in candidates {
+            guard let session = candidate.dictValue else { continue }
             let key = session["id"]?.stringValue
                 ?? session["sessionId"]?.stringValue
                 ?? session["session_id"]?.stringValue
+                ?? session["session"]?.stringValue
                 ?? session["key"]?.stringValue
-            guard let key else { return nil }
+            guard let key else { continue }
 
-            let name = session["title"]?.stringValue
-                ?? session["name"]?.stringValue
-                ?? key
-
-            return ACSessionEntry(
-                key: key,
-                name: name,
-                window: "0",
-                pane: "0",
-                running: true,
-                promoted: false,
-                createdAt: dateFrom(session["createdAt"]) ?? .now,
-                preview: session["preview"]?.stringValue,
-                statusText: session["status"]?.stringValue,
-                updatedAt: dateFrom(session["updatedAt"])
+            let status = statusText(from: session)
+            let updatedAt = dateFrom(session["updatedAt"])
+                ?? dateFrom(session["startTime"])
+                ?? dateFrom(session["mtime"])
+            let createdAt = dateFrom(session["createdAt"])
+                ?? updatedAt
+                ?? .now
+            let preview = session["preview"]?.stringValue
+                ?? session["prompt"]?.stringValue
+                ?? session["lastMessage"]?.stringValue
+            let name = bestDisplayName(
+                candidates: [
+                    session["title"]?.stringValue,
+                    session["name"]?.stringValue,
+                    session["prompt"]?.stringValue,
+                    preview,
+                ],
+                fallback: key
             )
+
+            parsed.append(
+                ACSessionEntry(
+                    key: key,
+                    name: name,
+                    window: "0",
+                    pane: "0",
+                    running: runningState(from: status),
+                    promoted: false,
+                    createdAt: createdAt,
+                    cwd: session["cwd"]?.stringValue
+                        ?? session["workingDirectory"]?.stringValue
+                        ?? session["working_directory"]?.stringValue,
+                    preview: preview,
+                    statusText: status,
+                    updatedAt: updatedAt
+                )
+            )
+        }
+
+        return parsed.sorted { lhs, rhs in
+            let lhsDate = lhs.updatedAt ?? lhs.createdAt
+            let rhsDate = rhs.updatedAt ?? rhs.createdAt
+            if lhsDate != rhsDate { return lhsDate > rhsDate }
+            return lhs.key < rhs.key
         }
     }
 
@@ -342,21 +513,40 @@ public final class ACSessionTransport {
             ?? root["id"]?.stringValue
         guard let key else { return nil }
 
-        let name = session["title"]?.stringValue
-            ?? session["name"]?.stringValue
-            ?? key
+        let status = statusText(from: session)
+        let updatedAt = dateFrom(session["updatedAt"])
+            ?? dateFrom(session["startTime"])
+            ?? dateFrom(session["mtime"])
+        let createdAt = dateFrom(session["createdAt"])
+            ?? updatedAt
+            ?? .now
+        let preview = session["preview"]?.stringValue
+            ?? session["prompt"]?.stringValue
+            ?? root["_meta"]?.dictValue?["piAcp"]?.dictValue?["startupInfo"]?.stringValue
+        let name = bestDisplayName(
+            candidates: [
+                session["title"]?.stringValue,
+                session["name"]?.stringValue,
+                session["prompt"]?.stringValue,
+                preview,
+            ],
+            fallback: key
+        )
 
         return ACSessionEntry(
             key: key,
             name: name,
             window: "0",
             pane: "0",
-            running: true,
+            running: runningState(from: status),
             promoted: false,
-            createdAt: dateFrom(session["createdAt"]) ?? .now,
-            preview: session["preview"]?.stringValue,
-            statusText: session["status"]?.stringValue,
-            updatedAt: dateFrom(session["updatedAt"])
+            createdAt: createdAt,
+            cwd: session["cwd"]?.stringValue
+                ?? session["workingDirectory"]?.stringValue
+                ?? session["working_directory"]?.stringValue,
+            preview: preview,
+            statusText: status,
+            updatedAt: updatedAt
         )
     }
 
@@ -511,6 +701,73 @@ public final class ACSessionTransport {
         return item["command"]?.stringValue ?? "command"
     }
 
+    private func upsertApprovalRequest(_ request: ACPendingApprovalRequest) {
+        if let index = pendingApprovalRequests.firstIndex(where: { $0.id == request.id }) {
+            pendingApprovalRequests[index] = request
+        } else {
+            pendingApprovalRequests.append(request)
+        }
+        pendingApprovalRequests.sort { $0.receivedAt < $1.receivedAt }
+    }
+
+    private func upsertUserInputRequest(_ request: ACPendingUserInputRequest) {
+        if let index = pendingUserInputRequests.firstIndex(where: { $0.id == request.id }) {
+            pendingUserInputRequests[index] = request
+        } else {
+            pendingUserInputRequests.append(request)
+        }
+        pendingUserInputRequests.sort { $0.receivedAt < $1.receivedAt }
+    }
+
+    private func parseUserInputQuestions(from root: [String: AnyCodable]) -> [ACUserInputQuestion] {
+        guard let rawQuestions = root["questions"]?.arrayValue else { return [] }
+        var parsedQuestions: [ACUserInputQuestion] = []
+        parsedQuestions.reserveCapacity(rawQuestions.count)
+
+        for (index, questionAny) in rawQuestions.enumerated() {
+            guard let question = questionAny.dictValue else { continue }
+            let id = question["id"]?.stringValue ?? "q_\(index + 1)"
+            let header = question["header"]?.stringValue ?? "Question \(index + 1)"
+            let prompt = question["question"]?.stringValue
+                ?? question["prompt"]?.stringValue
+                ?? ""
+            let allowsMultipleSelections = question["multiSelect"]?.boolValue
+                ?? question["multi_select"]?.boolValue
+                ?? false
+
+            let rawOptions = question["options"]?.arrayValue ?? []
+            var options: [ACUserInputOption] = []
+            options.reserveCapacity(rawOptions.count)
+            for (optionIndex, optionAny) in rawOptions.enumerated() {
+                guard let option = optionAny.dictValue else { continue }
+                let label = option["label"]?.stringValue
+                    ?? option["value"]?.stringValue
+                    ?? "Option \(optionIndex + 1)"
+                options.append(
+                    ACUserInputOption(
+                        id: "\(id)_\(optionIndex)",
+                        label: label,
+                        details: option["description"]?.stringValue,
+                        isOther: option["isOther"]?.boolValue ?? option["is_other"]?.boolValue ?? false,
+                        isSecret: option["isSecret"]?.boolValue ?? option["is_secret"]?.boolValue ?? false
+                    )
+                )
+            }
+
+            parsedQuestions.append(
+                ACUserInputQuestion(
+                    id: id,
+                    header: header,
+                    prompt: prompt,
+                    options: options,
+                    allowsMultipleSelections: allowsMultipleSelections
+                )
+            )
+        }
+
+        return parsedQuestions
+    }
+
     private func reasoningText(from item: [String: AnyCodable]) -> String {
         if let text = item["text"]?.stringValue, !text.isEmpty { return text }
         if let summaryText = item["summary"]?.stringValue, !summaryText.isEmpty { return summaryText }
@@ -540,17 +797,56 @@ public final class ACSessionTransport {
         return fallback
     }
 
+    private func statusText(from session: [String: AnyCodable]) -> String? {
+        session["status"]?.dictValue?["type"]?.stringValue
+            ?? session["status"]?.stringValue
+            ?? session["state"]?.stringValue
+    }
+
+    private func runningState(from status: String?) -> Bool {
+        guard let normalized = status?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            !normalized.isEmpty
+        else {
+            return true
+        }
+        switch normalized {
+        case "active", "running", "live", "in_progress", "in-progress":
+            return true
+        case "idle", "done", "completed", "stopped", "cancelled":
+            return false
+        default:
+            return true
+        }
+    }
+
     private func dateFrom(_ value: AnyCodable?) -> Date? {
         guard let value else { return nil }
-        if let seconds = value.doubleValue {
-            let normalized = seconds > 1_000_000_000_000 ? seconds / 1000 : seconds
-            return Date(timeIntervalSince1970: normalized)
+        if let raw = value.doubleValue {
+            return Date(timeIntervalSince1970: normalizeUnixTimestampToSeconds(raw))
         }
         if let text = value.stringValue {
+            if let numeric = Double(text) {
+                return Date(timeIntervalSince1970: normalizeUnixTimestampToSeconds(numeric))
+            }
             let formatter = ISO8601DateFormatter()
             return formatter.date(from: text)
         }
         return nil
+    }
+
+    private func normalizeUnixTimestampToSeconds(_ raw: Double) -> TimeInterval {
+        if raw >= 1e17 {
+            return raw / 1_000_000_000.0
+        }
+        if raw >= 1e14 {
+            return raw / 1_000_000.0
+        }
+        if raw >= 1e11 {
+            return raw / 1_000.0
+        }
+        return raw
     }
 }
 

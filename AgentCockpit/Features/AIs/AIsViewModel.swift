@@ -102,13 +102,15 @@ final class AIsViewModel {
 
     private var protocolLabel: String {
         switch appModel.settings.serverProtocol {
-        case .gatewayLegacy: "Gateway"
         case .acp: "ACP"
         case .codex: "Codex"
         }
     }
 
     private func locationText(for session: ACSessionEntry) -> String {
+        if let cwd = session.cwd?.trimmingCharacters(in: .whitespacesAndNewlines), !cwd.isEmpty {
+            return cwd
+        }
         let hasPane = session.window != "0" || session.pane != "0"
         if hasPane {
             return "window \(session.window) • pane \(session.pane)"

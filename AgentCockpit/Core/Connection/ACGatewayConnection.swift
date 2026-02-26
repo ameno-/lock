@@ -1,4 +1,4 @@
-// ACGatewayConnection.swift — URLSessionWebSocketTask client with auth + exponential backoff
+// ACGatewayConnection.swift — URLSessionWebSocketTask client with auth headers + exponential backoff
 import Foundation
 
 public enum ACConnectionState: Sendable, Equatable {
@@ -29,10 +29,6 @@ public final class ACGatewayConnection: NSObject {
     private let backoffBase: Double = 1.7
     private let backoffMax: Double = 8.0
 
-    private var requiresLegacyAuth: Bool {
-        settings.serverProtocol == .gatewayLegacy
-    }
-
     public init(settings: ACSettingsStore) {
         self.settings = settings
         super.init()
@@ -57,13 +53,7 @@ public final class ACGatewayConnection: NSObject {
 
     public func send(_ encodable: some Encodable) {
         guard let wsTask else { return }
-        let canSend: Bool
-        if requiresLegacyAuth {
-            canSend = state == .connected || state == .authenticating
-        } else {
-            canSend = state == .connected
-        }
-        guard canSend else { return }
+        guard state == .connected else { return }
         do {
             let data = try JSONEncoder().encode(encodable)
             let string = String(data: data, encoding: .utf8) ?? ""
@@ -88,18 +78,30 @@ public final class ACGatewayConnection: NSObject {
     private func startConnect() {
         state = .connecting
         let url = settings.wsURL
+        var request = URLRequest(url: url)
+
+        let token = settings.authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let cfAccessClientId = settings.cfAccessClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cfAccessClientId.isEmpty {
+            request.setValue(cfAccessClientId, forHTTPHeaderField: "CF-Access-Client-Id")
+        }
+
+        let cfAccessClientSecret = settings.cfAccessClientSecret
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cfAccessClientSecret.isEmpty {
+            request.setValue(cfAccessClientSecret, forHTTPHeaderField: "CF-Access-Client-Secret")
+        }
+
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         urlSession = session
-        let task = session.webSocketTask(with: url)
+        let task = session.webSocketTask(with: request)
         wsTask = task
         task.resume()
         startReceiving(task: task)
-    }
-
-    private func performAuth() {
-        state = .authenticating
-        let token = ACKeychainStore.loadToken() ?? ""
-        send(ACAuthMessage(token: token))
     }
 
     private func startReceiving(task: URLSessionWebSocketTask) {
@@ -136,9 +138,7 @@ public final class ACGatewayConnection: NSObject {
             state = .failed("Auth failed: \(msg)")
             wsTask?.cancel()
         case .ping:
-            if requiresLegacyAuth {
-                sendPong()
-            }
+            sendPong()
         default:
             break
         }
@@ -177,12 +177,8 @@ extension ACGatewayConnection: URLSessionWebSocketDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            if self.requiresLegacyAuth {
-                self.performAuth()
-            } else {
-                self.state = .connected
-                self.backoffDelay = 0.5
-            }
+            self.state = .connected
+            self.backoffDelay = 0.5
         }
     }
 

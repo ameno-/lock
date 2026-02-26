@@ -1,21 +1,24 @@
-// SettingsView.swift — Gateway host, token, Bonjour toggle
+// SettingsView.swift — Endpoint and auth configuration for ACP/Codex backends
 import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var gatewayToken = ""
+    @State private var authToken = ""
+    @State private var cfAccessClientId = ""
+    @State private var cfAccessClientSecret = ""
     @State private var didSave = false
     @State private var schemeInput = "ws"
     @State private var hostInput = ""
     @State private var portInput = ""
     @State private var pathInput = "/"
     @State private var workingDirectoryInput = ""
+    @State private var didApplyProfile = false
 
     var body: some View {
         @Bindable var settings = appModel.settings
 
         Form {
-            Section("Gateway Connection") {
+            Section("Endpoint") {
                 Picker("Protocol", selection: $settings.serverProtocol) {
                     ForEach(ACServerProtocol.allCases, id: \.rawValue) { mode in
                         Text(mode.displayName).tag(mode)
@@ -28,7 +31,7 @@ struct SettingsView: View {
                 }
 
                 LabeledContent("Host") {
-                    TextField("100.68.58.17", text: $hostInput)
+                    TextField("127.0.0.1", text: $hostInput)
                         .multilineTextAlignment(.trailing)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
@@ -46,8 +49,21 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 }
+            }
 
-                Toggle("Bonjour Discovery", isOn: $settings.bonjourEnabled)
+            Section("Quick Profiles") {
+                Button("Pi ACP Local (ws://127.0.0.1:8765)") {
+                    applyPiACPProfile()
+                }
+                Button("Codex Local (ws://127.0.0.1:8788)") {
+                    applyCodexProfile()
+                }
+                .foregroundStyle(.primary)
+                if didApplyProfile {
+                    Text("Profile applied. For ACP, set an absolute Working Dir before create/load.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Session Defaults") {
@@ -60,21 +76,40 @@ struct SettingsView: View {
             }
 
             Section("Authentication") {
-                SecureField("Gateway Token", text: $gatewayToken)
+                SecureField("Bearer Token", text: $authToken)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
 
-                Button("Save Token") {
-                    try? ACKeychainStore.saveToken(gatewayToken)
+                LabeledContent("CF Access Client ID") {
+                    TextField("Optional", text: $cfAccessClientId)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+
+                LabeledContent("CF Access Secret") {
+                    SecureField("Optional", text: $cfAccessClientSecret)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+
+                Button("Save Authentication") {
+                    settings.authToken = authToken
+                    settings.cfAccessClientId = cfAccessClientId
+                    settings.cfAccessClientSecret = cfAccessClientSecret
                     didSave = true
                 }
-                .disabled(gatewayToken.isEmpty)
 
                 if didSave {
-                    Label("Token saved", systemImage: "checkmark.circle.fill")
+                    Label("Credentials saved", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.caption)
                 }
+            }
+
+            Section("Discovery") {
+                Toggle("Bonjour Discovery", isOn: $settings.bonjourEnabled)
             }
 
             Section("Connection Status") {
@@ -99,12 +134,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .onAppear {
-            schemeInput = appModel.settings.scheme
-            hostInput = appModel.settings.host
-            portInput = String(appModel.settings.port)
-            pathInput = appModel.settings.path
-            workingDirectoryInput = appModel.settings.workingDirectory
-            gatewayToken = ACKeychainStore.loadToken() ?? ""
+            syncInputsFromSettings()
         }
         .onChange(of: schemeInput) { _, v in
             if v == "ws" || v == "wss" { appModel.settings.scheme = v }
@@ -121,5 +151,36 @@ struct SettingsView: View {
         .onChange(of: workingDirectoryInput) { _, v in
             appModel.settings.workingDirectory = v
         }
+    }
+
+    private func applyPiACPProfile() {
+        appModel.settings.serverProtocol = .acp
+        appModel.settings.scheme = "ws"
+        appModel.settings.host = "127.0.0.1"
+        appModel.settings.port = 8765
+        appModel.settings.path = "/"
+        didApplyProfile = true
+        syncInputsFromSettings()
+    }
+
+    private func applyCodexProfile() {
+        appModel.settings.serverProtocol = .codex
+        appModel.settings.scheme = "ws"
+        appModel.settings.host = "127.0.0.1"
+        appModel.settings.port = 8788
+        appModel.settings.path = "/"
+        didApplyProfile = true
+        syncInputsFromSettings()
+    }
+
+    private func syncInputsFromSettings() {
+        schemeInput = appModel.settings.scheme
+        hostInput = appModel.settings.host
+        portInput = String(appModel.settings.port)
+        pathInput = appModel.settings.path
+        workingDirectoryInput = appModel.settings.workingDirectory
+        authToken = appModel.settings.authToken
+        cfAccessClientId = appModel.settings.cfAccessClientId
+        cfAccessClientSecret = appModel.settings.cfAccessClientSecret
     }
 }

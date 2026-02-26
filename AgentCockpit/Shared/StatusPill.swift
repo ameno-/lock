@@ -46,12 +46,12 @@ public struct StatusPill: View {
                 )
 
             Text(label)
-                .font(.caption2)
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(color.opacity(0.3), lineWidth: 0.5))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+        .overlay(Capsule().stroke(Color(.systemGray5), lineWidth: 1))
     }
 }
