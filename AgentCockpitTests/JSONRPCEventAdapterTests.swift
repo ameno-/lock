@@ -2,6 +2,58 @@ import XCTest
 @testable import AgentCockpit
 
 final class JSONRPCEventAdapterTests: XCTestCase {
+    func testACPUserMessageMapsToRawOutput() {
+        let mapped = JSONRPCEventAdapter.map(
+            protocolMode: .acp,
+            method: "session/update",
+            params: [
+                "sessionId": AnyCodable("acp-1"),
+                "update": AnyCodable([
+                    "id": AnyCodable("msg-1"),
+                    "sessionUpdate": AnyCodable("user_message"),
+                    "text": AnyCodable("hello")
+                ])
+            ],
+            genuiEnabled: true,
+            fallbackSessionKey: nil
+        )
+
+        XCTAssertEqual(mapped?.sessionKey, "acp-1")
+        guard case let .rawOutput(event)? = mapped?.event else {
+            return XCTFail("Expected ACP user_message to map to raw output")
+        }
+        XCTAssertEqual(event.id, "acp/acp-1/user/msg-1")
+        XCTAssertEqual(event.text, "You: hello")
+    }
+
+    func testACPToolCallUpdateMapsToResultToolCard() {
+        let mapped = JSONRPCEventAdapter.map(
+            protocolMode: .acp,
+            method: "session/update",
+            params: [
+                "sessionId": AnyCodable("acp-1"),
+                "update": AnyCodable([
+                    "toolCallId": AnyCodable("tool-77"),
+                    "kind": AnyCodable("tool_call_update"),
+                    "toolName": AnyCodable("Read"),
+                    "result": AnyCodable("ok")
+                ])
+            ],
+            genuiEnabled: true,
+            fallbackSessionKey: nil
+        )
+
+        guard case let .toolUse(event)? = mapped?.event else {
+            return XCTFail("Expected ACP tool_call_update to map to tool card")
+        }
+
+        XCTAssertEqual(event.id, "acp/acp-1/tool/tool-77")
+        XCTAssertEqual(event.toolName, "Read")
+        XCTAssertEqual(event.phase, .result)
+        XCTAssertEqual(event.result, "ok")
+        XCTAssertEqual(event.status, .done)
+    }
+
     func testCodexDeltaUsesTurnScopedIDToAvoidFragmentation() {
         let first = JSONRPCEventAdapter.map(
             protocolMode: .codex,

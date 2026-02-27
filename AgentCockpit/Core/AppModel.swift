@@ -237,21 +237,14 @@ enum JSONRPCEventAdapter {
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         guard method == "session/update" else { return nil }
-        let root = params ?? [:]
-        let update = root["update"]?.dictValue ?? root
-        let sessionKey = root["sessionId"]?.stringValue
-            ?? root["session_id"]?.stringValue
-            ?? update["sessionId"]?.stringValue
-            ?? fallbackSessionKey
-            ?? "acp"
-        let kind = update["sessionUpdate"]?.stringValue
-            ?? update["kind"]?.stringValue
-            ?? update["type"]?.stringValue
-            ?? "session/update"
+        let parsed = ACPProtocolParser.parseSessionUpdate(
+            params: params,
+            fallbackSessionID: fallbackSessionKey
+        )
 
-        if !genuiEnabled && looksLikeGenUIPayload(update) {
+        if !genuiEnabled && parsed.type == .genUI {
             return (
-                sessionKey,
+                parsed.sessionID,
                 .rawOutput(
                     RawOutputEvent(
                         text: "GenUI payload received (disabled)",
@@ -262,150 +255,106 @@ enum JSONRPCEventAdapter {
         }
 
         if let event = parseGenUIEvent(
-            payload: update,
+            payload: parsed.update,
             protocolPrefix: "acp",
-            sessionKey: sessionKey,
-            fallbackID: firstNonEmpty(update["id"]?.stringValue, root["requestId"]?.stringValue),
+            sessionKey: parsed.sessionID,
+            fallbackID: firstNonEmpty(
+                parsed.update["id"]?.stringValue,
+                parsed.root["requestId"]?.stringValue
+            ),
             fallbackTitle: "ACP GenUI"
         ) {
-            return (sessionKey, .genUI(event))
+            return (parsed.sessionID, .genUI(event))
         }
 
-        if kind.contains("session_info_update") {
+        switch parsed.type {
+        case .sessionInfo:
             return nil
-        }
 
-        if kind.contains("tool_call_update") {
-            let toolName = update["toolName"]?.stringValue
-                ?? update["title"]?.stringValue
-                ?? update["tool"]?.dictValue?["name"]?.stringValue
-                ?? "Tool"
-            let resultText = sessionUpdateText(from: update)
-                ?? compactJSONString(from: update)
+        case .toolCallUpdate:
             let toolID = toolEventID(
                 protocolPrefix: "acp",
-                sessionKey: sessionKey,
-                primaryID: firstNonEmpty(
-                    update["toolCallId"]?.stringValue,
-                    update["tool_call_id"]?.stringValue,
-                    update["id"]?.stringValue
-                ),
-                fallback: toolName
+                sessionKey: parsed.sessionID,
+                primaryID: parsed.toolCallID,
+                fallback: parsed.toolName
             )
             return (
-                sessionKey,
+                parsed.sessionID,
                 .toolUse(
                     ToolUseEvent(
                         id: toolID,
-                        toolName: toolName,
+                        toolName: parsed.toolName,
                         phase: .result,
                         input: "",
-                        result: resultText,
-                        status: kind.contains("error") ? .error : .done
+                        result: parsed.toolResult,
+                        status: parsed.isError ? .error : .done
                     )
                 )
             )
-        }
 
-        if kind.contains("tool_call") {
-            let toolName = update["toolName"]?.stringValue
-                ?? update["title"]?.stringValue
-                ?? update["tool"]?.dictValue?["name"]?.stringValue
-                ?? "Tool"
-            let inputText: String = {
-                if let parsed = sessionUpdateText(from: update), !parsed.isEmpty {
-                    return parsed
-                }
-                let rawInput = compactJSONString(from: update["rawInput"]?.dictValue ?? [:])
-                if !rawInput.isEmpty {
-                    return rawInput
-                }
-                return compactJSONString(from: update["arguments"]?.dictValue ?? [:])
-            }()
+        case .toolCall:
             let toolID = toolEventID(
                 protocolPrefix: "acp",
-                sessionKey: sessionKey,
-                primaryID: firstNonEmpty(
-                    update["toolCallId"]?.stringValue,
-                    update["tool_call_id"]?.stringValue,
-                    update["id"]?.stringValue
-                ),
-                fallback: toolName
+                sessionKey: parsed.sessionID,
+                primaryID: parsed.toolCallID,
+                fallback: parsed.toolName
             )
             return (
-                sessionKey,
+                parsed.sessionID,
                 .toolUse(
                     ToolUseEvent(
                         id: toolID,
-                        toolName: toolName,
+                        toolName: parsed.toolName,
                         phase: .start,
-                        input: inputText,
+                        input: parsed.toolInput,
                         status: .running
                     )
                 )
             )
-        }
 
-        if kind.contains("user_message") {
-            let text = sessionUpdateText(from: update) ?? compactJSONString(from: update)
-            guard !text.isEmpty else { return nil }
-            let eventID = firstNonEmpty(
-                update["id"]?.stringValue,
-                update["messageId"]?.stringValue,
-                update["message_id"]?.stringValue
-            ) ?? UUID().uuidString
+        case .userMessage:
+            guard !parsed.text.isEmpty else { return nil }
+            let eventID = parsed.updateID ?? UUID().uuidString
             return (
-                sessionKey,
+                parsed.sessionID,
                 .rawOutput(
                     RawOutputEvent(
-                        id: "acp/\(sessionKey)/user/\(eventID)",
-                        text: "You: \(text)",
+                        id: "acp/\(parsed.sessionID)/user/\(eventID)",
+                        text: "You: \(parsed.text)",
                         hookEvent: method
                     )
                 )
             )
-        }
 
-        if kind.contains("agent_message") || kind.contains("agent_thought") {
-            let text = sessionUpdateText(from: update)
-                ?? compactJSONString(from: update)
-            guard !text.isEmpty else { return nil }
+        case .agentMessage, .agentThought:
+            guard !parsed.text.isEmpty else { return nil }
             let eventID = reasoningEventID(
                 protocolPrefix: "acp",
-                sessionKey: sessionKey,
-                primaryID: firstNonEmpty(
-                    update["id"]?.stringValue,
-                    update["messageId"]?.stringValue,
-                    update["message_id"]?.stringValue,
-                    update["itemId"]?.stringValue,
-                    update["item_id"]?.stringValue,
-                    update["eventId"]?.stringValue,
-                    update["event_id"]?.stringValue
-                ),
-                turnID: firstNonEmpty(
-                    update["turnId"]?.stringValue,
-                    update["turn_id"]?.stringValue,
-                    root["turnId"]?.stringValue,
-                    root["turn_id"]?.stringValue
-                ),
-                fallback: kind
+                sessionKey: parsed.sessionID,
+                primaryID: parsed.updateID,
+                turnID: parsed.turnID,
+                fallback: parsed.rawKind
             )
             return (
-                sessionKey,
+                parsed.sessionID,
                 .reasoning(
                     ReasoningEvent(
                         id: eventID,
-                        text: text,
-                        isThinking: kind.contains("thought")
+                        text: parsed.text,
+                        isThinking: parsed.type == .agentThought
                     )
                 )
             )
-        }
 
-        return (
-            sessionKey,
-            .rawOutput(RawOutputEvent(text: "ACP \(kind)", hookEvent: method))
-        )
+        case .genUI:
+            return nil
+
+        case .unknown(let kind):
+            return (
+                parsed.sessionID,
+                .rawOutput(RawOutputEvent(text: "ACP \(kind)", hookEvent: method))
+            )
+        }
     }
 
     private static func mapCodex(
@@ -676,59 +625,6 @@ enum JSONRPCEventAdapter {
         }
     }
 
-    private static func sessionUpdateText(from update: [String: AnyCodable]) -> String? {
-        let direct = firstNonEmpty(
-            update["text"]?.stringValue,
-            update["delta"]?.stringValue,
-            update["output"]?.stringValue,
-            update["result"]?.stringValue,
-            update["message"]?.stringValue,
-            update["input"]?.stringValue,
-            update["arguments"]?.stringValue
-        )
-        if let direct, !direct.isEmpty {
-            return direct
-        }
-
-        if let contentObject = update["content"]?.dictValue {
-            if let nested = firstNonEmpty(
-                contentObject["text"]?.stringValue,
-                contentObject["value"]?.stringValue
-            ), !nested.isEmpty {
-                return nested
-            }
-            if let nestedContent = contentObject["content"]?.dictValue,
-               let nested = firstNonEmpty(
-                   nestedContent["text"]?.stringValue,
-                   nestedContent["value"]?.stringValue
-               ), !nested.isEmpty {
-                return nested
-            }
-        }
-
-        if let contentArray = update["content"]?.arrayValue {
-            let parts = contentArray.compactMap { entry -> String? in
-                if let s = entry.stringValue, !s.isEmpty { return s }
-                guard let dict = entry.dictValue else { return nil }
-                if let text = dict["text"]?.stringValue, !text.isEmpty { return text }
-                if let nested = dict["content"]?.dictValue?["text"]?.stringValue, !nested.isEmpty {
-                    return nested
-                }
-                return nil
-            }
-            if !parts.isEmpty {
-                return parts.joined(separator: "\n")
-            }
-        }
-
-        if let inputObject = update["rawInput"]?.dictValue {
-            let compact = compactJSONString(from: inputObject)
-            if !compact.isEmpty { return compact }
-        }
-
-        return nil
-    }
-
     private static func fileOperation(from kind: String) -> FileOperation {
         switch kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "delete", "deleted":
@@ -882,18 +778,7 @@ enum JSONRPCEventAdapter {
     }
 
     private static func looksLikeGenUIPayload(_ payload: [String: AnyCodable]) -> Bool {
-        if payload["genUI"]?.dictValue != nil || payload["gen_ui"]?.dictValue != nil {
-            return true
-        }
-        if payload["surfaceSpec"]?.dictValue != nil || payload["surface_spec"]?.dictValue != nil {
-            return true
-        }
-        let marker = firstNonEmpty(
-            payload["kind"]?.stringValue,
-            payload["type"]?.stringValue,
-            payload["sessionUpdate"]?.stringValue
-        )?.lowercased() ?? ""
-        return marker.contains("genui")
+        ACPProtocolParser.looksLikeGenUIPayload(payload)
     }
 
     private static func normalizedSchemaVersion(from payload: [String: AnyCodable]) -> String {

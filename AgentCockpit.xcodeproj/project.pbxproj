@@ -39,6 +39,7 @@
 		ADBD77D02D45A484A9AC9CB9 /* SkillRunCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4AF260880E4FB61C7AAE40A /* SkillRunCard.swift */; };
 		B875C151039BB80E12959418 /* SubAgentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23A3256E9A0644AA20A5410 /* SubAgentCard.swift */; };
 		C34D7F71C68D1BB7799E1853 /* RootNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE4F56B109766731F5B8DD53 /* RootNavigation.swift */; };
+		C7AE7116059B431E636FCA2C /* ACPProtocolParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F09F73CE01286286D3EACBE3 /* ACPProtocolParserTests.swift */; };
 		CB13B7409AE71D2DC5A71D8D /* AIsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B845FE5C1469E72E717E5D0 /* AIsViewModel.swift */; };
 		CFA20C945D406DE939C5F7FE /* ToolUseCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7728CBEC53AA85C1A29849F3 /* ToolUseCard.swift */; };
 		D0B691B6CBCCC26D472DAB1C /* EventCardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571B2416E216EACD84289370 /* EventCardRouter.swift */; };
@@ -47,6 +48,7 @@
 		D675143AF46167824CE26ED6 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = B37870267187CBB69CE25764 /* MarkdownUI */; };
 		E13D9C145DDA91C71D2C2CE9 /* snippet-templates.json in Resources */ = {isa = PBXBuildFile; fileRef = 123F7160DCE1E46AAA2CD33F /* snippet-templates.json */; };
 		E9993BD71B9AF4BB6C5930D1 /* ACSessionTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B78004586AD3F460010C5EC /* ACSessionTransport.swift */; };
+		EA523B02A3B55525D4884350 /* ACPProtocolParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB22EC61F26AACB3D0D6CF92 /* ACPProtocolParser.swift */; };
 		EE2EB05969E6DBEA18A86CD6 /* AgentRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C27F4FF9F2708AF640F1A96 /* AgentRowView.swift */; };
 		F207134725AD95550A487851 /* AgenticKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B355DB3EE5DBF25DD6B55DD /* AgenticKeyboard.swift */; };
 		F9C91B3067EC0809FAFF7757 /* AssistantTextParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ED95A1173253717E5F5B27 /* AssistantTextParser.swift */; };
@@ -109,6 +111,8 @@
 		E6BDD0355FE7C5C26CA836D2 /* KeyboardSnippetMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSnippetMode.swift; sourceTree = "<group>"; };
 		E7174A78B3CA517F5C5C9D41 /* AgentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailView.swift; sourceTree = "<group>"; };
 		EABADDD7E9A13483FF092DEE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F09F73CE01286286D3EACBE3 /* ACPProtocolParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACPProtocolParserTests.swift; sourceTree = "<group>"; };
+		FB22EC61F26AACB3D0D6CF92 /* ACPProtocolParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACPProtocolParser.swift; sourceTree = "<group>"; };
 		FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventStoreGenUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -127,6 +131,7 @@
 		0E90967453B5E877F0F4DAF1 /* AgentCockpitTests */ = {
 			isa = PBXGroup;
 			children = (
+				F09F73CE01286286D3EACBE3 /* ACPProtocolParserTests.swift */,
 				E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */,
 				FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */,
 				BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */,
@@ -183,6 +188,7 @@
 		48DF5BEC040F1AA3476AE5D0 /* Protocol */ = {
 			isa = PBXGroup;
 			children = (
+				FB22EC61F26AACB3D0D6CF92 /* ACPProtocolParser.swift */,
 				AB079F1A65BF171049005EF3 /* ACProtocol.swift */,
 				511FA187BEB259DFDB587470 /* CodexProtocolParser.swift */,
 			);
@@ -416,6 +422,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C7AE7116059B431E636FCA2C /* ACPProtocolParserTests.swift in Sources */,
 				121CDA8E2F6B44348742AD29 /* ACPSessionHistoryParsingTests.swift in Sources */,
 				A14664505F3DD459DBB3F974 /* AgentEventStoreGenUITests.swift in Sources */,
 				FDD5E95428F54AE234EAEBB9 /* CodexProtocolParserTests.swift in Sources */,
@@ -429,6 +436,7 @@
 			files = (
 				980315217229C31E77474A5D /* ACGatewayConnection.swift in Sources */,
 				A9D72ECDB74085C5D718EE1D /* ACKeychainStore.swift in Sources */,
+				EA523B02A3B55525D4884350 /* ACPProtocolParser.swift in Sources */,
 				45E0BB41C8B02481469DD49A /* ACProtocol.swift in Sources */,
 				E9993BD71B9AF4BB6C5930D1 /* ACSessionTransport.swift in Sources */,
 				A09DDE7738ACC3B05360F0EA /* ACSettingsStore.swift in Sources */,
