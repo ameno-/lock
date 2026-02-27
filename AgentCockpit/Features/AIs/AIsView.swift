@@ -10,35 +10,44 @@ struct AIsView: View {
     }
 
     var body: some View {
-        Group {
-            if viewModel.sessions.isEmpty && !viewModel.isLoading {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(viewModel.sessions) { session in
-                            let isPromoted = appModel.promotedSessionKey == session.key
-                            let summary = viewModel.rowSummary(for: session, isPromoted: isPromoted)
-                            Button {
-                                viewModel.promote(session: session)
-                            } label: {
-                                AgentRowView(summary: summary)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button("Open Session") {
+        VStack(spacing: 0) {
+            if !viewModel.sessions.isEmpty {
+                filterBar
+            }
+
+            Group {
+                if viewModel.sessions.isEmpty && !viewModel.isLoading {
+                    emptyState
+                } else if viewModel.visibleSessions.isEmpty && !viewModel.isLoading {
+                    filteredEmptyState
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(viewModel.visibleSessions) { session in
+                                let isPromoted = appModel.promotedSessionKey == session.key
+                                let summary = viewModel.rowSummary(for: session, isPromoted: isPromoted)
+                                Button {
                                     viewModel.promote(session: session)
+                                } label: {
+                                    AgentRowView(summary: summary)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Open Session") {
+                                        viewModel.promote(session: session)
+                                    }
                                 }
                             }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .refreshable { await viewModel.refresh() }
                 }
-                .refreshable { await viewModel.refresh() }
             }
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .searchable(text: $viewModel.searchQuery, prompt: "Search sessions")
         .navigationTitle("Sessions")
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -93,5 +102,34 @@ struct AIsView: View {
         case .codex:
             "No Codex threads found. Create one with + or resume an existing thread."
         }
+    }
+
+    private var filteredEmptyState: some View {
+        ContentUnavailableView {
+            Label("No Matching Sessions", systemImage: "line.3.horizontal.decrease.circle")
+        } description: {
+            Text("Try changing the filter or search query.")
+        } actions: {
+            if viewModel.hasActiveFilters {
+                Button("Clear Filters") {
+                    viewModel.resetFilters()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private var filterBar: some View {
+        VStack(spacing: 10) {
+            Picker("Session Filter", selection: $viewModel.selectedFilter) {
+                ForEach(SessionListFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
     }
 }

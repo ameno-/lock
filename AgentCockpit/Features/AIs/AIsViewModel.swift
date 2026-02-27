@@ -1,6 +1,28 @@
 // AIsViewModel.swift — Polls sessions.list every 5s
 import Foundation
 
+enum SessionListFilter: String, CaseIterable, Identifiable, Sendable {
+    case all
+    case active
+    case idle
+    case actionRequired
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            "All"
+        case .active:
+            "Active"
+        case .idle:
+            "Idle"
+        case .actionRequired:
+            "Needs Action"
+        }
+    }
+}
+
 struct SessionRowSummary: Identifiable, Sendable {
     let id: String
     let title: String
@@ -27,11 +49,43 @@ final class AIsViewModel {
     private var pollTask: Task<Void, Never>?
 
     var sessions: [ACSessionEntry] = []
+    var selectedFilter: SessionListFilter = .all
+    var searchQuery: String = ""
     var isLoading = false
     var error: String? = nil
 
     init(appModel: AppModel) {
         self.appModel = appModel
+    }
+
+    var visibleSessions: [ACSessionEntry] {
+        let sorted = sessions.sorted { lhs, rhs in
+            let lhsDate = appModel.eventStore.digest(for: lhs.key)?.lastEventAt
+                ?? lhs.updatedAt
+                ?? normalizedCreatedAt(lhs.createdAt)
+                ?? .distantPast
+            let rhsDate = appModel.eventStore.digest(for: rhs.key)?.lastEventAt
+                ?? rhs.updatedAt
+                ?? normalizedCreatedAt(rhs.createdAt)
+                ?? .distantPast
+            if lhsDate != rhsDate {
+                return lhsDate > rhsDate
+            }
+            return lhs.key < rhs.key
+        }
+
+        return sorted.filter { session in
+            matchesSearch(session) && matchesFilter(session)
+        }
+    }
+
+    var hasActiveFilters: Bool {
+        selectedFilter != .all || !trimmedSearchQuery.isEmpty
+    }
+
+    func resetFilters() {
+        selectedFilter = .all
+        searchQuery = ""
     }
 
     func start() {
@@ -187,5 +241,46 @@ final class AIsViewModel {
             return "\(formatted.replacingOccurrences(of: ".0", with: ""))k"
         }
         return "\(value)"
+    }
+
+    private var trimmedSearchQuery: String {
+        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func matchesSearch(_ session: ACSessionEntry) -> Bool {
+        let query = trimmedSearchQuery
+        guard !query.isEmpty else { return true }
+
+        let digest = appModel.eventStore.digest(for: session.key)
+        let location = locationText(for: session)
+        let haystack = [
+            session.key,
+            session.name,
+            session.preview ?? "",
+            digest?.previewText ?? "",
+            location
+        ].joined(separator: "\n")
+        return haystack.localizedCaseInsensitiveContains(query)
+    }
+
+    private func matchesFilter(_ session: ACSessionEntry) -> Bool {
+        switch selectedFilter {
+        case .all:
+            return true
+        case .active:
+            return sessionIsRunning(session: session, digest: appModel.eventStore.digest(for: session.key))
+        case .idle:
+            return !sessionIsRunning(session: session, digest: appModel.eventStore.digest(for: session.key))
+        case .actionRequired:
+            return requiresAction(sessionKey: session.key)
+        }
+    }
+
+    private func requiresAction(sessionKey: String) -> Bool {
+        appModel.pendingApprovalRequests.contains { request in
+            request.threadId == sessionKey
+        } || appModel.pendingUserInputRequests.contains { request in
+            request.threadId == sessionKey
+        }
     }
 }

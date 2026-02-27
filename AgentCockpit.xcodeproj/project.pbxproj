@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0E7F695D05552A6740BE9380 /* AIsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42727ADB2A95EEFC551C541 /* AIsView.swift */; };
 		121CDA8E2F6B44348742AD29 /* ACPSessionHistoryParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */; };
+		124D912643B1007C25C6D399 /* AIsViewModelFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBB42B335736713118836671 /* AIsViewModelFilterTests.swift */; };
 		12F01E03412BE241AB48B649 /* ReasoningCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 885EF6EC02BE143E83CB023C /* ReasoningCard.swift */; };
 		161DD93CFFF4A7775ED089A5 /* CardBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CAAA2727A9F368B8BE9627F /* CardBase.swift */; };
 		1B5CCD2771AD05E90F32EFAF /* CodexProtocolParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511FA187BEB259DFDB587470 /* CodexProtocolParser.swift */; };
@@ -113,6 +114,7 @@
 		EABADDD7E9A13483FF092DEE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F09F73CE01286286D3EACBE3 /* ACPProtocolParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACPProtocolParserTests.swift; sourceTree = "<group>"; };
 		FB22EC61F26AACB3D0D6CF92 /* ACPProtocolParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACPProtocolParser.swift; sourceTree = "<group>"; };
+		FBB42B335736713118836671 /* AIsViewModelFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIsViewModelFilterTests.swift; sourceTree = "<group>"; };
 		FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventStoreGenUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -134,6 +136,7 @@
 				F09F73CE01286286D3EACBE3 /* ACPProtocolParserTests.swift */,
 				E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */,
 				FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */,
+				FBB42B335736713118836671 /* AIsViewModelFilterTests.swift */,
 				BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */,
 				B281571F0021FF53FF92B31E /* JSONRPCEventAdapterTests.swift */,
 			);
@@ -424,6 +427,7 @@
 			files = (
 				C7AE7116059B431E636FCA2C /* ACPProtocolParserTests.swift in Sources */,
 				121CDA8E2F6B44348742AD29 /* ACPSessionHistoryParsingTests.swift in Sources */,
+				124D912643B1007C25C6D399 /* AIsViewModelFilterTests.swift in Sources */,
 				A14664505F3DD459DBB3F974 /* AgentEventStoreGenUITests.swift in Sources */,
 				FDD5E95428F54AE234EAEBB9 /* CodexProtocolParserTests.swift in Sources */,
 				24563A496880D7171E6082C3 /* JSONRPCEventAdapterTests.swift in Sources */,
