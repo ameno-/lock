@@ -44,7 +44,11 @@ final class WorkViewModel {
     }
 
     var snippetCategories: [SnippetCategory] {
-        SnippetLoader.shared.categories
+        let context = SnippetContext(
+            agentSlug: appModel.settings.snippetAgentSlug,
+            harnessSlug: appModel.settings.serverProtocol.rawValue
+        )
+        return SnippetLoader.shared.categories(for: context)
     }
 
     // MARK: - Actions

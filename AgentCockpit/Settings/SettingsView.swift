@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var portInput = ""
     @State private var pathInput = "/"
     @State private var workingDirectoryInput = ""
+    @State private var snippetAgentSlugInput = ""
     @State private var didApplyProfile = false
 
     var body: some View {
@@ -69,6 +70,12 @@ struct SettingsView: View {
             Section("Session Defaults") {
                 LabeledContent("Working Dir") {
                     TextField("/remote/path", text: $workingDirectoryInput)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+                LabeledContent("Snippet Agent") {
+                    TextField("optional", text: $snippetAgentSlugInput)
                         .multilineTextAlignment(.trailing)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -158,6 +165,9 @@ struct SettingsView: View {
         .onChange(of: workingDirectoryInput) { _, v in
             appModel.settings.workingDirectory = v
         }
+        .onChange(of: snippetAgentSlugInput) { _, v in
+            appModel.settings.snippetAgentSlug = v
+        }
     }
 
     private func applyPiACPProfile() {
@@ -186,6 +196,7 @@ struct SettingsView: View {
         portInput = String(appModel.settings.port)
         pathInput = appModel.settings.path
         workingDirectoryInput = appModel.settings.workingDirectory
+        snippetAgentSlugInput = appModel.settings.snippetAgentSlug
         authToken = appModel.settings.authToken
         cfAccessClientId = appModel.settings.cfAccessClientId
         cfAccessClientSecret = appModel.settings.cfAccessClientSecret

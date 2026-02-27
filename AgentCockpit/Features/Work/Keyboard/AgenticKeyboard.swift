@@ -38,7 +38,6 @@ struct InlineAgenticKeyboard: View {
 
     @State private var isSnippetMode = false
     @State private var selectedCategory: String = ""
-    @Namespace private var ns
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,8 +45,7 @@ struct InlineAgenticKeyboard: View {
                 KeyboardSnippetMode(
                     selectedCategory: $selectedCategory,
                     onInsert: { snippet in
-                        text += snippet
-                        isSnippetMode = false
+                        text = appendSnippet(snippet, to: text)
                     },
                     onDismiss: {
                         withAnimation(.spring(duration: 0.25)) { isSnippetMode = false }
@@ -61,9 +59,6 @@ struct InlineAgenticKeyboard: View {
                     onSend: onSend,
                     onAbort: onAbort,
                     onSnippetToggle: {
-                        if selectedCategory.isEmpty, let first = snippetCategories.first {
-                            selectedCategory = first.id
-                        }
                         withAnimation(.spring(duration: 0.25)) { isSnippetMode = true }
                     }
                 )
@@ -71,5 +66,18 @@ struct InlineAgenticKeyboard: View {
             }
         }
         .animation(.spring(duration: 0.25), value: isSnippetMode)
+    }
+
+    private func appendSnippet(_ snippet: String, to existing: String) -> String {
+        guard !snippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return existing }
+        guard !existing.isEmpty else { return snippet }
+
+        if existing.hasSuffix("\n\n") {
+            return existing + snippet
+        }
+        if existing.hasSuffix("\n") {
+            return existing + "\n" + snippet
+        }
+        return existing + "\n\n" + snippet
     }
 }

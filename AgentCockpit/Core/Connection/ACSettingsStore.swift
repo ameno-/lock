@@ -15,6 +15,7 @@ public final class ACSettingsStore {
         static let cfAccessClientId = "agentcockpit.auth.cfAccessClientId"
         static let cfAccessClientSecret = "agentcockpit.auth.cfAccessClientSecret"
         static let genuiEnabled = "agentcockpit.feature.genuiEnabled"
+        static let snippetAgentSlug = "agentcockpit.snippets.agentSlug"
     }
 
     public var host: String {
@@ -90,6 +91,11 @@ public final class ACSettingsStore {
             return UserDefaults.standard.bool(forKey: Keys.genuiEnabled)
         }
         set { UserDefaults.standard.set(newValue, forKey: Keys.genuiEnabled) }
+    }
+
+    public var snippetAgentSlug: String {
+        get { UserDefaults.standard.string(forKey: Keys.snippetAgentSlug) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.snippetAgentSlug) }
     }
 
     public var wsURL: URL {
