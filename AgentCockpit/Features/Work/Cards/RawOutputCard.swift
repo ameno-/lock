@@ -7,7 +7,7 @@ struct RawOutputCard: View {
     var body: some View {
         CardBase {
             VStack(alignment: .leading, spacing: 6) {
-                if !event.hookEvent.isEmpty {
+                if showsHookEvent {
                     Text(event.hookEvent)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -19,5 +19,12 @@ struct RawOutputCard: View {
                     .textSelection(.enabled)
             }
         }
+    }
+
+    private var showsHookEvent: Bool {
+        let hook = event.hookEvent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hook.isEmpty else { return false }
+        let hiddenPrefixes = ["item/", "thread/", "session/", "local/userMessage", "history/userMessage"]
+        return !hiddenPrefixes.contains(where: { hook.hasPrefix($0) })
     }
 }

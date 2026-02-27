@@ -9,34 +9,12 @@ struct KeyboardInputMode: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Modifier strip
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(modifierKeys, id: \.label) { key in
-                        Button(key.label) { key.action(&text) }
-                            .font(.system(.caption, design: .monospaced).weight(.medium))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-                            )
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            }
-
-            Divider().opacity(0.3)
-
-            // Text editor
-            TextEditor(text: $text)
+            TextField("Message the agent…", text: $text, axis: .vertical)
                 .font(.system(.body))
-                .frame(minHeight: 44, maxHeight: 120)
+                .lineLimit(1 ... 4)
+                .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .scrollContentBackground(.hidden)
 
             Divider().opacity(0.3)
 
@@ -87,23 +65,3 @@ struct KeyboardInputMode: View {
         .background(.ultraThinMaterial)
     }
 }
-
-// MARK: - Modifier keys definition
-
-private struct ModifierKey: Sendable {
-    let label: String
-    let action: @Sendable (inout String) -> Void
-}
-
-@MainActor
-private let modifierKeys: [ModifierKey] = [
-    .init(label: "Ctrl-C") { _ in },  // handled by abort
-    .init(label: "Esc") { text in text += "\u{1B}" },
-    .init(label: "Tab") { text in text += "\t" },
-    .init(label: "↑") { _ in },
-    .init(label: "↓") { _ in },
-    .init(label: "←") { _ in },
-    .init(label: "→") { _ in },
-    .init(label: "Enter") { text in text += "\n" },
-    .init(label: "y/n") { text in text += "y" },
-]

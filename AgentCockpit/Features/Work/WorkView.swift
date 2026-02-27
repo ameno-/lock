@@ -29,6 +29,9 @@ struct WorkView: View {
                         events: viewModel.canvasEvents,
                         onViewSubAgentInAIs: { _ in
                             appModel.selectedTab = .sessions
+                        },
+                        onGenUIAction: { event in
+                            viewModel.performGenUIAction(event)
                         }
                     )
                 }

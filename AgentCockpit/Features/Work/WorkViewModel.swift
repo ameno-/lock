@@ -57,12 +57,6 @@ final class WorkViewModel {
         let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
 
-        // Immediate local echo so sending feedback is visible even before server events arrive.
-        appModel.eventStore.ingest(
-            event: .rawOutput(RawOutputEvent(text: "You: \(prompt)", hookEvent: "local/userMessage")),
-            sessionKey: key
-        )
-
         Task {
             do {
                 try await appModel.transport.subscribe(sessionKey: key)
@@ -76,7 +70,25 @@ final class WorkViewModel {
     func abort() {
         guard let key = activeSessionKey else { return }
         Task {
-            try? await appModel.transport.send(sessionKey: key, text: "\u{03}") // Ctrl-C
+            do {
+                try await appModel.transport.cancel(sessionKey: key)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func performGenUIAction(_ event: GenUIEvent) {
+        guard let key = activeSessionKey else {
+            errorMessage = "No active session for GenUI action."
+            return
+        }
+        Task {
+            do {
+                try await appModel.transport.submitGenUIAction(sessionKey: key, event: event)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

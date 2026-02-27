@@ -222,7 +222,14 @@ public enum FileOperation: Sendable {
 // MARK: - GenUI
 
 public struct GenUIEvent: Sendable {
+    public enum UpdateMode: Sendable {
+        case snapshot
+        case patch
+    }
+
     public let id: String
+    public let schemaVersion: String
+    public let mode: UpdateMode
     public let title: String
     public let body: String
     public let actionLabel: String?
@@ -231,6 +238,8 @@ public struct GenUIEvent: Sendable {
 
     public init(
         id: String = UUID().uuidString,
+        schemaVersion: String = "v0",
+        mode: UpdateMode = .snapshot,
         title: String,
         body: String,
         actionLabel: String? = nil,
@@ -238,6 +247,8 @@ public struct GenUIEvent: Sendable {
         timestamp: Date = .now
     ) {
         self.id = id
+        self.schemaVersion = schemaVersion
+        self.mode = mode
         self.title = title
         self.body = body
         self.actionLabel = actionLabel

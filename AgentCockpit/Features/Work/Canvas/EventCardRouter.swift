@@ -4,6 +4,7 @@ import SwiftUI
 struct EventCardRouter: View {
     let event: CanvasEvent
     var onViewInAIs: (() -> Void)? = nil
+    var onGenUIAction: ((GenUIEvent) -> Void)? = nil
 
     var body: some View {
         switch event {
@@ -26,7 +27,7 @@ struct EventCardRouter: View {
             FileEditCard(event: e)
 
         case .genUI(let e):
-            GenUICard(event: e)
+            GenUICard(event: e, onAction: onGenUIAction)
 
         case .rawOutput(let e):
             RawOutputCard(event: e)
@@ -36,6 +37,7 @@ struct EventCardRouter: View {
 
 private struct GenUICard: View {
     let event: GenUIEvent
+    var onAction: ((GenUIEvent) -> Void)? = nil
 
     var body: some View {
         CardBase {
@@ -49,13 +51,22 @@ private struct GenUICard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                Text("\(event.schemaVersion) • \(event.mode == .patch ? "patch" : "snapshot")")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+
                 if let actionLabel = event.actionLabel, !actionLabel.isEmpty {
-                    Label(actionLabel, systemImage: "bolt.circle.fill")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.12), in: Capsule())
+                    Button {
+                        onAction?(event)
+                    } label: {
+                        Label(actionLabel, systemImage: "bolt.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.blue)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }

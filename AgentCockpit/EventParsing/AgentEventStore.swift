@@ -159,14 +159,74 @@ public final class AgentEventStore {
                     timestamp: new.timestamp
                 )
             )
+        case let (.genUI(old), .genUI(new)):
+            return .genUI(
+                GenUIEvent(
+                    id: old.id,
+                    schemaVersion: new.schemaVersion,
+                    mode: new.mode,
+                    title: mergedText(current: old.title, incoming: new.title, preferIncoming: new.mode == .snapshot),
+                    body: mergedText(current: old.body, incoming: new.body, preferIncoming: new.mode == .snapshot),
+                    actionLabel: new.actionLabel ?? old.actionLabel,
+                    actionPayload: mergeActionPayload(current: old.actionPayload, incoming: new.actionPayload),
+                    timestamp: new.timestamp
+                )
+            )
         default:
             return incoming
         }
     }
 
+    private func mergeActionPayload(
+        current: [String: AnyCodable],
+        incoming: [String: AnyCodable]
+    ) -> [String: AnyCodable] {
+        guard !incoming.isEmpty else { return current }
+        var merged = current
+        for (key, value) in incoming {
+            merged[key] = value
+        }
+        return merged
+    }
+
+    private func mergedText(current: String, incoming: String, preferIncoming: Bool) -> String {
+        let trimmedIncoming = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedIncoming.isEmpty {
+            return current
+        }
+        if preferIncoming {
+            return incoming
+        }
+        return incoming.count >= current.count ? incoming : current
+    }
+
     private func mergeReasoningText(current: String, incoming: String) -> String {
         guard !incoming.isEmpty else { return current }
         guard !current.isEmpty else { return incoming }
+
+        let normalizedCurrent = normalizedReasoningText(current)
+        let normalizedIncoming = normalizedReasoningText(incoming)
+        let fingerprintCurrent = reasoningFingerprint(normalizedCurrent)
+        let fingerprintIncoming = reasoningFingerprint(normalizedIncoming)
+
+        if normalizedIncoming == normalizedCurrent {
+            return incoming
+        }
+        if !fingerprintCurrent.isEmpty && fingerprintIncoming == fingerprintCurrent {
+            return incoming
+        }
+        if normalizedIncoming.hasPrefix(normalizedCurrent) {
+            return incoming
+        }
+        if normalizedCurrent.hasPrefix(normalizedIncoming) {
+            return current
+        }
+        if !fingerprintCurrent.isEmpty && fingerprintIncoming.hasPrefix(fingerprintCurrent) {
+            return incoming
+        }
+        if !fingerprintIncoming.isEmpty && fingerprintCurrent.hasPrefix(fingerprintIncoming) {
+            return current
+        }
 
         if incoming.hasPrefix(current) || (incoming.count > current.count && incoming.contains(current)) {
             return incoming
@@ -180,6 +240,28 @@ public final class AgentEventStore {
         let needsSpace = (lastScalar.map(CharacterSet.whitespacesAndNewlines.contains) == false)
             && (firstScalar.map(CharacterSet.whitespacesAndNewlines.contains) == false)
         return needsSpace ? "\(current) \(incoming)" : "\(current)\(incoming)"
+    }
+
+    private func normalizedReasoningText(_ text: String) -> String {
+        var normalized = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(separator: " ")
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let punctuation = [".", ",", "?", "!", ";", ":"]
+        for mark in punctuation {
+            normalized = normalized.replacingOccurrences(of: " \(mark)", with: mark)
+        }
+        return normalized
+    }
+
+    private func reasoningFingerprint(_ text: String) -> String {
+        let allowed = CharacterSet.alphanumerics
+        return text.unicodeScalars
+            .filter { allowed.contains($0) }
+            .map { Character($0) }
+            .map { String($0).lowercased() }
+            .joined()
     }
 
     // MARK: - Digest

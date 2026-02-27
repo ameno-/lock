@@ -78,6 +78,7 @@ public final class AppModel {
                 protocolMode: settings.serverProtocol,
                 method: method,
                 params: params,
+                genuiEnabled: settings.genuiEnabled,
                 fallbackSessionKey: promotedSessionKey
             ) {
                 eventStore.ingest(event: mapped.event, sessionKey: mapped.sessionKey)
@@ -203,24 +204,36 @@ public enum AppTab: Hashable {
     case work
 }
 
-private enum JSONRPCEventAdapter {
+enum JSONRPCEventAdapter {
     static func map(
         protocolMode: ACServerProtocol,
         method: String,
         params: [String: AnyCodable]?,
+        genuiEnabled: Bool,
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         switch protocolMode {
         case .acp:
-            return mapACP(method: method, params: params, fallbackSessionKey: fallbackSessionKey)
+            return mapACP(
+                method: method,
+                params: params,
+                genuiEnabled: genuiEnabled,
+                fallbackSessionKey: fallbackSessionKey
+            )
         case .codex:
-            return mapCodex(method: method, params: params, fallbackSessionKey: fallbackSessionKey)
+            return mapCodex(
+                method: method,
+                params: params,
+                genuiEnabled: genuiEnabled,
+                fallbackSessionKey: fallbackSessionKey
+            )
         }
     }
 
     private static func mapACP(
         method: String,
         params: [String: AnyCodable]?,
+        genuiEnabled: Bool,
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         guard method == "session/update" else { return nil }
@@ -235,6 +248,18 @@ private enum JSONRPCEventAdapter {
             ?? update["kind"]?.stringValue
             ?? update["type"]?.stringValue
             ?? "session/update"
+
+        if !genuiEnabled && looksLikeGenUIPayload(update) {
+            return (
+                sessionKey,
+                .rawOutput(
+                    RawOutputEvent(
+                        text: "GenUI payload received (disabled)",
+                        hookEvent: method
+                    )
+                )
+            )
+        }
 
         if let event = parseGenUIEvent(
             payload: update,
@@ -386,6 +411,7 @@ private enum JSONRPCEventAdapter {
     private static func mapCodex(
         method: String,
         params: [String: AnyCodable]?,
+        genuiEnabled: Bool,
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         let root = params ?? [:]
@@ -401,19 +427,19 @@ private enum JSONRPCEventAdapter {
                 ?? root["text"]?.stringValue
                 ?? ""
             guard !delta.isEmpty else { return nil }
+            let turnID = firstNonEmpty(
+                root["turnId"]?.stringValue,
+                root["turn"]?.dictValue?["id"]?.stringValue
+            )
             let eventID = reasoningEventID(
                 protocolPrefix: "codex",
                 sessionKey: sessionKey,
-                primaryID: firstNonEmpty(
+                primaryID: turnID == nil ? firstNonEmpty(
                     root["itemId"]?.stringValue,
                     root["item_id"]?.stringValue,
-                    root["item"]?.dictValue?["id"]?.stringValue,
-                    root["id"]?.stringValue
-                ),
-                turnID: firstNonEmpty(
-                    root["turnId"]?.stringValue,
-                    root["turn"]?.dictValue?["id"]?.stringValue
-                ),
+                    root["item"]?.dictValue?["id"]?.stringValue
+                ) : nil,
+                turnID: turnID,
                 fallback: "agentMessage"
             )
             return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: delta, isThinking: false)))
@@ -423,6 +449,25 @@ private enum JSONRPCEventAdapter {
                 return (sessionKey, .rawOutput(RawOutputEvent(text: method, hookEvent: method)))
             }
             let itemType = item["type"]?.stringValue ?? "item"
+            let normalizedItemType = itemType
+                .replacingOccurrences(of: "-", with: "_")
+                .lowercased()
+
+            if normalizedItemType == "contextcompaction" || normalizedItemType == "context_compaction" {
+                return nil
+            }
+
+            if !genuiEnabled && looksLikeGenUIPayload(item) {
+                return (
+                    sessionKey,
+                    .rawOutput(
+                        RawOutputEvent(
+                            text: "GenUI payload received (disabled)",
+                            hookEvent: method
+                        )
+                    )
+                )
+            }
 
             if let event = parseGenUIEvent(
                 payload: item,
@@ -434,7 +479,7 @@ private enum JSONRPCEventAdapter {
                 return (sessionKey, .genUI(event))
             }
 
-            if itemType == "userMessage" {
+            if normalizedItemType == "usermessage" || normalizedItemType == "user_message" {
                 let text = userMessageText(from: item)
                 guard !text.isEmpty else { return nil }
                 let itemID = firstNonEmpty(
@@ -453,10 +498,8 @@ private enum JSONRPCEventAdapter {
                 )
             }
 
-            if itemType == "agentMessage" {
-                let text = item["text"]?.stringValue
-                    ?? item["content"]?.stringValue
-                    ?? ""
+            if normalizedItemType == "agentmessage" || normalizedItemType == "agent_message" {
+                let text = agentMessageText(from: item)
                 guard !text.isEmpty else { return nil }
                 let eventID = reasoningEventID(
                     protocolPrefix: "codex",
@@ -497,7 +540,7 @@ private enum JSONRPCEventAdapter {
                 return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: text, isThinking: true)))
             }
 
-            if itemType == "commandExecution" {
+            if normalizedItemType == "commandexecution" || normalizedItemType == "command_execution" {
                 let command = commandText(from: item)
                 let statusRaw = item["status"]?.stringValue ?? ""
                 let status: ToolStatus = switch statusRaw {
@@ -532,7 +575,7 @@ private enum JSONRPCEventAdapter {
                 )
             }
 
-            if itemType == "fileChange" {
+            if normalizedItemType == "filechange" || normalizedItemType == "file_change" {
                 if let changes = item["changes"]?.arrayValue,
                    let first = changes.first?.dictValue,
                    let path = first["path"]?.stringValue {
@@ -555,7 +598,8 @@ private enum JSONRPCEventAdapter {
                 }
             }
 
-            if itemType == "mcpToolCall" || itemType == "collabToolCall" {
+            if normalizedItemType == "mcptoolcall" || normalizedItemType == "mcp_tool_call"
+                || normalizedItemType == "collabtoolcall" || normalizedItemType == "collab_tool_call" {
                 let toolName = item["tool"]?.stringValue
                     ?? item["name"]?.stringValue
                     ?? itemType
@@ -591,13 +635,38 @@ private enum JSONRPCEventAdapter {
 
             return (
                 sessionKey,
-                .rawOutput(RawOutputEvent(text: "Codex item: \(itemType)", hookEvent: method))
+                .rawOutput(
+                    RawOutputEvent(
+                        id: toolEventID(
+                            protocolPrefix: "codex",
+                            sessionKey: sessionKey,
+                            primaryID: firstNonEmpty(
+                                item["id"]?.stringValue,
+                                root["itemId"]?.stringValue
+                            ),
+                            fallback: "item/\(itemType)"
+                        ),
+                        text: "Codex item: \(itemType)",
+                        hookEvent: method
+                    )
+                )
             )
 
         case "turn/started", "turn/completed", "thread/started", "thread/status/changed", "thread/tokenUsage/updated":
             return nil
 
         case "genui/update", "gen_ui/update":
+            if !genuiEnabled {
+                return (
+                    sessionKey,
+                    .rawOutput(
+                        RawOutputEvent(
+                            text: "GenUI update received (disabled)",
+                            hookEvent: method
+                        )
+                    )
+                )
+            }
             if let event = parseGenUIEvent(
                 payload: root,
                 protocolPrefix: "codex",
@@ -691,6 +760,40 @@ private enum JSONRPCEventAdapter {
             }
         }
         return item["text"]?.stringValue ?? ""
+    }
+
+    private static func agentMessageText(from item: [String: AnyCodable]) -> String {
+        if let text = item["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        if let content = item["content"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !content.isEmpty {
+            return content
+        }
+        if let entries = item["content"]?.arrayValue {
+            let parts = entries.compactMap { entry -> String? in
+                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                guard let payload = entry.dictValue else { return nil }
+                if let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !nested.isEmpty {
+                    return nested
+                }
+                return nil
+            }
+            if !parts.isEmpty {
+                return parts.joined(separator: "\n")
+            }
+        }
+        return ""
     }
 
     private static func reasoningText(from item: [String: AnyCodable]) -> String {
@@ -804,6 +907,9 @@ private enum JSONRPCEventAdapter {
         }
 
         let ui = explicit ?? payload
+        let schemaVersion = normalizedSchemaVersion(from: ui)
+        guard schemaVersion == "v0" else { return nil }
+
         let identifier = firstNonEmpty(
             ui["id"]?.stringValue,
             ui["surfaceId"]?.stringValue,
@@ -821,6 +927,7 @@ private enum JSONRPCEventAdapter {
             ui["description"]?.stringValue,
             compactJSONString(from: ui)
         ) ?? ""
+        guard body.count <= 16_000 else { return nil }
 
         let actionLabel = firstNonEmpty(
             ui["actionLabel"]?.stringValue,
@@ -830,13 +937,53 @@ private enum JSONRPCEventAdapter {
         let actionPayload = ui["action"]?.dictValue
             ?? ui["primaryAction"]?.dictValue
             ?? [:]
+        let modeRaw = firstNonEmpty(
+            ui["mode"]?.stringValue,
+            ui["updateMode"]?.stringValue,
+            ui["update_mode"]?.stringValue
+        )?.lowercased()
+        let updateMode: GenUIEvent.UpdateMode = (modeRaw == "patch") ? .patch : .snapshot
 
         return GenUIEvent(
             id: "\(protocolPrefix)/\(sessionKey)/genui/\(identifier)",
+            schemaVersion: schemaVersion,
+            mode: updateMode,
             title: title,
             body: body,
             actionLabel: actionLabel,
             actionPayload: actionPayload
         )
+    }
+
+    private static func looksLikeGenUIPayload(_ payload: [String: AnyCodable]) -> Bool {
+        if payload["genUI"]?.dictValue != nil || payload["gen_ui"]?.dictValue != nil {
+            return true
+        }
+        if payload["surfaceSpec"]?.dictValue != nil || payload["surface_spec"]?.dictValue != nil {
+            return true
+        }
+        let marker = firstNonEmpty(
+            payload["kind"]?.stringValue,
+            payload["type"]?.stringValue,
+            payload["sessionUpdate"]?.stringValue
+        )?.lowercased() ?? ""
+        return marker.contains("genui")
+    }
+
+    private static func normalizedSchemaVersion(from payload: [String: AnyCodable]) -> String {
+        if let text = firstNonEmpty(
+            payload["schemaVersion"]?.stringValue,
+            payload["schema_version"]?.stringValue,
+            payload["version"]?.stringValue
+        )?.lowercased() {
+            if text == "0" || text == "v0" {
+                return "v0"
+            }
+            return text
+        }
+        if let number = payload["schemaVersion"]?.intValue ?? payload["version"]?.intValue {
+            return number == 0 ? "v0" : "\(number)"
+        }
+        return "v0"
     }
 }

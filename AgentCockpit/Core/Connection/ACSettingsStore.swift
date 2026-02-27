@@ -14,6 +14,7 @@ public final class ACSettingsStore {
         static let bonjourEnabled = "agentcockpit.bonjour.enabled"
         static let cfAccessClientId = "agentcockpit.auth.cfAccessClientId"
         static let cfAccessClientSecret = "agentcockpit.auth.cfAccessClientSecret"
+        static let genuiEnabled = "agentcockpit.feature.genuiEnabled"
     }
 
     public var host: String {
@@ -79,6 +80,16 @@ public final class ACSettingsStore {
     public var bonjourEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Keys.bonjourEnabled) }
         set { UserDefaults.standard.set(newValue, forKey: Keys.bonjourEnabled) }
+    }
+
+    public var genuiEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Keys.genuiEnabled) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Keys.genuiEnabled)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.genuiEnabled) }
     }
 
     public var wsURL: URL {

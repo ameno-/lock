@@ -4,6 +4,7 @@ import SwiftUI
 struct EventCanvasView: View {
     let events: [CanvasEvent]
     var onViewSubAgentInAIs: ((SubAgentEvent) -> Void)? = nil
+    var onGenUIAction: ((GenUIEvent) -> Void)? = nil
 
     @State private var isAtBottom = true
     @State private var lastRenderedMarker = ""
@@ -17,6 +18,8 @@ struct EventCanvasView: View {
                             if case .subAgent(let e) = event {
                                 onViewSubAgentInAIs?(e)
                             }
+                        } onGenUIAction: { genui in
+                            onGenUIAction?(genui)
                         }
                         .padding(.horizontal, 12)
                         .id(event.id)

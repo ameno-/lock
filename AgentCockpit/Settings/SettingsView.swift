@@ -112,6 +112,13 @@ struct SettingsView: View {
                 Toggle("Bonjour Discovery", isOn: $settings.bonjourEnabled)
             }
 
+            Section("Features") {
+                Toggle("Enable GenUI", isOn: $settings.genuiEnabled)
+                Text("When disabled, GenUI payloads stay visible as raw text events.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Connection Status") {
                 HStack {
                     Text("Status")

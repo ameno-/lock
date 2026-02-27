@@ -40,6 +40,18 @@ targets:
       - package: swift-markdown-ui
         product: MarkdownUI
 
+  AgentCockpitTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentCockpitTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: AgentCockpit
+
 schemes:
   AgentCockpit:
     build:
@@ -49,5 +61,7 @@ schemes:
       config: Debug
     test:
       config: Debug
+      targets:
+        - AgentCockpitTests
     archive:
       config: Release

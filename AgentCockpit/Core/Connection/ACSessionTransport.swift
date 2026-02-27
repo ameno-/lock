@@ -58,6 +58,7 @@ public final class ACSessionTransport {
     private var loadedACPSessionIDs: Set<String> = []
     private var loadedCodexThreadIDs: Set<String> = []
     private var acpSessionDirectories: [String: String] = [:]
+    private var activeCodexTurnByThread: [String: String] = [:]
     public private(set) var pendingApprovalRequests: [ACPendingApprovalRequest] = []
     public private(set) var pendingUserInputRequests: [ACPendingUserInputRequest] = []
 
@@ -71,6 +72,7 @@ public final class ACSessionTransport {
         loadedACPSessionIDs.removeAll()
         loadedCodexThreadIDs.removeAll()
         acpSessionDirectories.removeAll()
+        activeCodexTurnByThread.removeAll()
     }
 
     // Called by AppModel when a message arrives
@@ -84,6 +86,9 @@ public final class ACSessionTransport {
                     continuation.resume(returning: result)
                 }
             }
+
+        case .jsonrpcNotification(let method, let params):
+            trackCodexTurnLifecycle(method: method, params: params)
 
         default:
             break
@@ -264,8 +269,7 @@ public final class ACSessionTransport {
     public func loadSessionContext(sessionKey: String) async throws -> [CanvasEvent] {
         switch settings.serverProtocol {
         case .acp:
-            try await ensureACPSessionLoaded(sessionKey: sessionKey)
-            return []
+            return try await loadACPHistory(sessionKey: sessionKey)
 
         case .codex:
             let result = try await requestJSON(
@@ -276,6 +280,54 @@ public final class ACSessionTransport {
                 ]
             )
             return parseCodexHistory(from: result)
+        }
+    }
+
+    public func cancel(sessionKey: String) async throws {
+        switch settings.serverProtocol {
+        case .acp:
+            var params: [String: AnyCodable] = ["sessionId": AnyCodable(sessionKey)]
+            if let cwd = resolvedACPCwd(for: sessionKey) {
+                params["cwd"] = AnyCodable(cwd)
+            }
+            _ = try await requestJSON(method: "session/cancel", params: params)
+
+        case .codex:
+            try await ensureCodexThreadResumed(sessionKey: sessionKey)
+            var params: [String: AnyCodable] = [
+                "threadId": AnyCodable(sessionKey),
+            ]
+            if let turnID = activeCodexTurnByThread[sessionKey] {
+                params["turnId"] = AnyCodable(turnID)
+            }
+            _ = try await requestJSON(method: "turn/interrupt", params: params)
+        }
+    }
+
+    public func submitGenUIAction(sessionKey: String, event: GenUIEvent) async throws {
+        guard !event.actionPayload.isEmpty else { return }
+        let surfaceID = event.id.split(separator: "/").last.map(String.init) ?? event.id
+
+        var payload = event.actionPayload
+        payload["surfaceId"] = AnyCodable(surfaceID)
+        payload["schemaVersion"] = AnyCodable(event.schemaVersion)
+
+        switch settings.serverProtocol {
+        case .acp:
+            try await ensureACPSessionLoaded(sessionKey: sessionKey)
+            payload["sessionId"] = AnyCodable(sessionKey)
+            try await requestFirstAvailable(
+                methods: ["genui/action", "gen_ui/action", "session/genui/action"],
+                params: payload
+            )
+
+        case .codex:
+            try await ensureCodexThreadResumed(sessionKey: sessionKey)
+            payload["threadId"] = AnyCodable(sessionKey)
+            try await requestFirstAvailable(
+                methods: ["genui/action", "gen_ui/action", "item/genui/action"],
+                params: payload
+            )
         }
     }
 
@@ -291,6 +343,29 @@ public final class ACSessionTransport {
     private func requestJSON(method: String, params: [String: AnyCodable]? = nil) async throws -> AnyCodable? {
         try await ensureJSONRPCInitializedIfNeeded()
         return try await sendJSONRequest(method: method, params: params)
+    }
+
+    private func requestFirstAvailable(
+        methods: [String],
+        params: [String: AnyCodable]
+    ) async throws {
+        var lastError: ACTransportError?
+        for method in methods {
+            do {
+                _ = try await requestJSON(method: method, params: params)
+                return
+            } catch ACTransportError.serverError(let code, _) where code == -32601 {
+                continue
+            } catch let error as ACTransportError {
+                lastError = error
+                break
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        throw ACTransportError.serverError(-32601, "No supported GenUI action method found")
     }
 
     private func sendJSONRequest(
@@ -419,6 +494,33 @@ public final class ACSessionTransport {
         }
     }
 
+    private func loadACPHistory(sessionKey: String) async throws -> [CanvasEvent] {
+        var params: [String: AnyCodable] = ["sessionId": AnyCodable(sessionKey)]
+        if let cwd = resolvedACPCwd(for: sessionKey) {
+            params["cwd"] = AnyCodable(cwd)
+        }
+
+        let methods = ["session/load", "session/resume"]
+        var lastError: ACTransportError?
+
+        for method in methods {
+            do {
+                let result = try await requestJSON(method: method, params: params)
+                loadedACPSessionIDs.insert(sessionKey)
+                return Self.mapACPHistory(from: result, sessionKey: sessionKey)
+            } catch ACTransportError.serverError(let code, _) where code == -32601 {
+                continue
+            } catch let error as ACTransportError {
+                lastError = error
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        return []
+    }
+
     private func ensureCodexThreadResumed(sessionKey: String) async throws {
         guard settings.serverProtocol == .codex else { return }
         guard !loadedCodexThreadIDs.contains(sessionKey) else { return }
@@ -428,6 +530,37 @@ public final class ACSessionTransport {
             params: ["threadId": AnyCodable(sessionKey)]
         )
         loadedCodexThreadIDs.insert(sessionKey)
+    }
+
+    private func trackCodexTurnLifecycle(method: String, params: [String: AnyCodable]?) {
+        guard settings.serverProtocol == .codex else { return }
+        let root = params ?? [:]
+
+        switch method {
+        case "turn/started":
+            let threadID = root["threadId"]?.stringValue
+                ?? root["turn"]?.dictValue?["threadId"]?.stringValue
+            let turnID = root["turnId"]?.stringValue
+                ?? root["turn"]?.dictValue?["id"]?.stringValue
+            if let threadID, let turnID {
+                activeCodexTurnByThread[threadID] = turnID
+            }
+
+        case "turn/completed":
+            if let threadID = root["threadId"]?.stringValue
+                ?? root["turn"]?.dictValue?["threadId"]?.stringValue {
+                activeCodexTurnByThread.removeValue(forKey: threadID)
+            }
+
+        case "thread/started":
+            if let threadID = root["threadId"]?.stringValue
+                ?? root["thread"]?.dictValue?["id"]?.stringValue {
+                loadedCodexThreadIDs.insert(threadID)
+            }
+
+        default:
+            break
+        }
     }
 
     // MARK: - Parsing helpers
@@ -606,7 +739,10 @@ public final class ACSessionTransport {
         let root = result?.dictValue ?? [:]
         let thread = root["thread"]?.dictValue ?? root
         let threadKey = thread["id"]?.stringValue ?? "codex"
-        let turns = thread["turns"]?.arrayValue ?? []
+        let turns = thread["turns"]?.arrayValue
+            ?? root["turns"]?.arrayValue
+            ?? root["data"]?.dictValue?["turns"]?.arrayValue
+            ?? []
 
         var history: [CanvasEvent] = []
         for turnAny in turns {
@@ -620,30 +756,86 @@ public final class ACSessionTransport {
         return history
     }
 
-    private func parseCodexHistoryItem(_ item: [String: AnyCodable], threadKey: String) -> [CanvasEvent] {
-        let itemType = item["type"]?.stringValue ?? ""
-        let itemID = item["id"]?.stringValue ?? UUID().uuidString
+    static func mapACPHistory(from result: AnyCodable?, sessionKey: String) -> [CanvasEvent] {
+        let root = result?.dictValue ?? [:]
+        let messages = root["history"]?.arrayValue
+            ?? root["messages"]?.arrayValue
+            ?? root["session"]?.dictValue?["history"]?.arrayValue
+            ?? root["session"]?.dictValue?["messages"]?.arrayValue
+            ?? []
 
-        if itemType == "userMessage" {
-            let content = item["content"]?.arrayValue ?? []
-            return content.enumerated().compactMap { index, entry in
-                guard let payload = entry.dictValue,
-                      payload["type"]?.stringValue == "text",
-                      let text = payload["text"]?.stringValue,
-                      !text.isEmpty
-                else { return nil }
-                return .rawOutput(
-                    RawOutputEvent(
-                        id: "codex/\(threadKey)/user/\(itemID)/\(index)",
-                        text: "You: \(text)",
-                        hookEvent: "history/userMessage"
+        var history: [CanvasEvent] = []
+        history.reserveCapacity(messages.count)
+
+        for (index, messageAny) in messages.enumerated() {
+            guard let message = messageAny.dictValue else { continue }
+            let role = (message["role"]?.stringValue ?? "assistant").lowercased()
+            let content = historyMessageText(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !content.isEmpty else { continue }
+
+            let messageID = message["id"]?.stringValue
+                ?? message["messageId"]?.stringValue
+                ?? message["message_id"]?.stringValue
+                ?? "\(index)"
+
+            switch role {
+            case "user":
+                history.append(
+                    .rawOutput(
+                        RawOutputEvent(
+                            id: "acp/\(sessionKey)/history/user/\(messageID)",
+                            text: "You: \(content)",
+                            hookEvent: "history/userMessage"
+                        )
+                    )
+                )
+            case "system":
+                history.append(
+                    .rawOutput(
+                        RawOutputEvent(
+                            id: "acp/\(sessionKey)/history/system/\(messageID)",
+                            text: content,
+                            hookEvent: "history/systemMessage"
+                        )
+                    )
+                )
+            default:
+                history.append(
+                    .reasoning(
+                        ReasoningEvent(
+                            id: "acp/\(sessionKey)/history/assistant/\(messageID)",
+                            text: content,
+                            isThinking: false
+                        )
                     )
                 )
             }
         }
 
+        return history
+    }
+
+    private func parseCodexHistoryItem(_ item: [String: AnyCodable], threadKey: String) -> [CanvasEvent] {
+        let itemType = canonicalCodexItemType(item["type"]?.stringValue ?? "")
+        let itemID = item["id"]?.stringValue ?? UUID().uuidString
+
+        if itemType == "userMessage" {
+            let text = userMessageText(from: item)
+            guard !text.isEmpty else { return [] }
+            return [
+                .rawOutput(
+                    RawOutputEvent(
+                        id: "codex/\(threadKey)/user/\(itemID)",
+                        text: "You: \(text)",
+                        hookEvent: "history/userMessage"
+                    )
+                )
+            ]
+        }
+
         if itemType == "agentMessage" {
-            guard let text = item["text"]?.stringValue, !text.isEmpty else { return [] }
+            let text = agentMessageText(from: item)
+            guard !text.isEmpty else { return [] }
             return [.reasoning(ReasoningEvent(id: "codex/\(threadKey)/\(itemID)", text: text, isThinking: false))]
         }
 
@@ -693,12 +885,144 @@ public final class ACSessionTransport {
         return []
     }
 
+    private func canonicalCodexItemType(_ rawType: String) -> String {
+        let normalized = rawType.replacingOccurrences(of: "-", with: "_").lowercased()
+        switch normalized {
+        case "user_message":
+            return "userMessage"
+        case "agent_message":
+            return "agentMessage"
+        case "command_execution":
+            return "commandExecution"
+        case "file_change":
+            return "fileChange"
+        case "mcp_tool_call":
+            return "mcpToolCall"
+        case "collab_tool_call":
+            return "collabToolCall"
+        default:
+            return rawType
+        }
+    }
+
     private func commandText(from item: [String: AnyCodable]) -> String {
         if let array = item["command"]?.arrayValue {
             let parts = array.compactMap(\.stringValue)
             if !parts.isEmpty { return parts.joined(separator: " ") }
         }
         return item["command"]?.stringValue ?? "command"
+    }
+
+    private func userMessageText(from item: [String: AnyCodable]) -> String {
+        if let text = item["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        if let content = item["content"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !content.isEmpty {
+            return content
+        }
+        if let entries = item["content"]?.arrayValue {
+            let parts = entries.compactMap { entry -> String? in
+                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                guard let payload = entry.dictValue else { return nil }
+                if payload["type"]?.stringValue == "text",
+                   let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !nested.isEmpty {
+                    return nested
+                }
+                return nil
+            }
+            if !parts.isEmpty {
+                return parts.joined(separator: "\n")
+            }
+        }
+        return ""
+    }
+
+    private static func historyMessageText(from message: [String: AnyCodable]) -> String {
+        if let text = message["content"]?.stringValue, !text.isEmpty {
+            return text
+        }
+        if let text = message["text"]?.stringValue, !text.isEmpty {
+            return text
+        }
+        if let content = message["content"]?.dictValue {
+            if let text = content["text"]?.stringValue, !text.isEmpty {
+                return text
+            }
+            if let nested = content["content"]?.dictValue?["text"]?.stringValue, !nested.isEmpty {
+                return nested
+            }
+        }
+        if let entries = message["content"]?.arrayValue {
+            let parts = entries.compactMap { entry -> String? in
+                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+                    return text
+                }
+                guard let payload = entry.dictValue else { return nil }
+                if let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !nested.isEmpty {
+                    return nested
+                }
+                return nil
+            }
+            if !parts.isEmpty {
+                return parts.joined(separator: "\n")
+            }
+        }
+        return ""
+    }
+
+    private func agentMessageText(from item: [String: AnyCodable]) -> String {
+        if let text = item["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        if let content = item["content"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !content.isEmpty {
+            return content
+        }
+        if let message = item["message"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !message.isEmpty {
+            return message
+        }
+        if let entries = item["content"]?.arrayValue {
+            let parts = entries.compactMap { entry -> String? in
+                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                guard let payload = entry.dictValue else { return nil }
+                if let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !text.isEmpty {
+                    return text
+                }
+                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !nested.isEmpty {
+                    return nested
+                }
+                return nil
+            }
+            if !parts.isEmpty {
+                return parts.joined(separator: "\n")
+            }
+        }
+        return ""
     }
 
     private func upsertApprovalRequest(_ request: ACPendingApprovalRequest) {
