@@ -1,0 +1,19 @@
+services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    ports:
+      - "19000:19000"
+    environment:
+      AGENTCOCKPIT_TOKEN: dev-token-change-me
+      AGENTCOCKPIT_PORT: 19000
+    # Mount a hook-replay script for injecting test events without Claude Code
+    volumes:
+      - ./scripts:/scripts:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:19000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

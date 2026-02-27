@@ -1,0 +1,15 @@
+{
+  "tools": {
+    "Bash": { "emoji": "⚡", "label": "Shell" },
+    "Read": { "emoji": "📖", "label": "Read" },
+    "Write": { "emoji": "✍️", "label": "Write" },
+    "Edit": { "emoji": "✏️", "label": "Edit" },
+    "Glob": { "emoji": "🔍", "label": "Glob" },
+    "Grep": { "emoji": "🔎", "label": "Search" },
+    "WebFetch": { "emoji": "🌐", "label": "Fetch" },
+    "WebSearch": { "emoji": "🌐", "label": "Search" },
+    "Task": { "emoji": "🤖", "label": "Task" },
+    "NotebookEdit": { "emoji": "📓", "label": "Notebook" },
+    "TodoWrite": { "emoji": "📝", "label": "Todo" }
+  }
+}

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "git",
+    "name": "Git",
+    "templates": [
+      {
+        "id": "git-push",
+        "name": "Push to branch",
+        "text": "git push origin {{branch}}",
+        "variables": ["branch"]
+      },
+      {
+        "id": "git-commit",
+        "name": "Commit + push",
+        "text": "git add -A && git commit -m '{{message}}' && git push",
+        "variables": ["message"]
+      },
+      {
+        "id": "git-status",
+        "name": "Git status",
+        "text": "git status --porcelain",
+        "variables": []
+      },
+      {
+        "id": "git-diff",
+        "name": "Show diff",
+        "text": "git diff HEAD",
+        "variables": []
+      }
+    ]
+  },
+  {
+    "id": "explain",
+    "name": "Explain",
+    "templates": [
+      {
+        "id": "explain-code",
+        "name": "Explain this code",
+        "text": "Explain what this code does: {{file_path}}",
+        "variables": ["file_path"]
+      },
+      {
+        "id": "explain-error",
+        "name": "Explain error",
+        "text": "Explain this error and how to fix it: {{error}}",
+        "variables": ["error"]
+      },
+      {
+        "id": "explain-diff",
+        "name": "Explain diff",
+        "text": "Explain the changes in the latest git diff",
+        "variables": []
+      }
+    ]
+  },
+  {
+    "id": "navigate",
+    "name": "Navigate",
+    "templates": [
+      {
+        "id": "find-file",
+        "name": "Find file",
+        "text": "Find the file that contains {{symbol}}",
+        "variables": ["symbol"]
+      },
+      {
+        "id": "list-dir",
+        "name": "List directory",
+        "text": "ls -la {{path}}",
+        "variables": ["path"]
+      },
+      {
+        "id": "worktree",
+        "name": "Open worktree",
+        "text": "git worktree list",
+        "variables": []
+      }
+    ]
+  },
+  {
+    "id": "deploy",
+    "name": "Deploy",
+    "templates": [
+      {
+        "id": "npm-build",
+        "name": "npm build",
+        "text": "npm run build",
+        "variables": []
+      },
+      {
+        "id": "npm-test",
+        "name": "npm test",
+        "text": "npm test",
+        "variables": []
+      },
+      {
+        "id": "deploy-custom",
+        "name": "Deploy script",
+        "text": "bash {{script}}",
+        "variables": ["script"]
+      }
+    ]
+  },
+  {
+    "id": "debug",
+    "name": "Debug",
+    "templates": [
+      {
+        "id": "show-logs",
+        "name": "Show logs",
+        "text": "tail -f {{log_file}}",
+        "variables": ["log_file"]
+      },
+      {
+        "id": "process-list",
+        "name": "Process list",
+        "text": "ps aux | grep {{process}}",
+        "variables": ["process"]
+      },
+      {
+        "id": "debug-fix",
+        "name": "Debug and fix",
+        "text": "Debug this error and fix it: {{error_description}}",
+        "variables": ["error_description"]
+      }
+    ]
+  }
+]
