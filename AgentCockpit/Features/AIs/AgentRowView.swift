@@ -80,6 +80,9 @@ struct AgentRowView: View {
                 .stroke(Color(.systemGray5).opacity(colorScheme == .dark ? 0.4 : 1), lineWidth: colorScheme == .dark ? 0.5 : 1)
         )
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0 : 0.05), radius: 10, y: 6)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint("Opens session")
     }
 
     @ViewBuilder
@@ -90,5 +93,9 @@ struct AgentRowView: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background((neutral ? Color(.systemGray5) : tint.opacity(0.14)), in: Capsule())
+    }
+
+    private var accessibilitySummary: String {
+        "\(summary.title), \(summary.protocolLabel), \(summary.statusLabel), \(summary.lastActivityLabel), \(summary.location)"
     }
 }

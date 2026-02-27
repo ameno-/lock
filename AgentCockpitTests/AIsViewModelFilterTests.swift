@@ -109,4 +109,29 @@ final class AIsViewModelFilterTests: XCTestCase {
         viewModel.selectedFilter = .actionRequired
         XCTAssertEqual(viewModel.visibleSessions.map(\.key), ["session-needs-input"])
     }
+
+    func testRowSummaryCompactsLongPreviewText() {
+        let appModel = AppModel()
+        let viewModel = AIsViewModel(appModel: appModel)
+        let longPreview = """
+        This is a very long preview line that should be compacted into a safer size for mobile cards.
+        It includes newlines and extra spacing so the summary logic can normalize it properly.
+        """
+
+        let session = ACSessionEntry(
+            key: "session-long-preview",
+            name: "Long Preview Session title that also needs to be compacted for readable mobile rows with accessibility labels",
+            window: "0",
+            pane: "0",
+            running: true,
+            promoted: false,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            preview: longPreview
+        )
+
+        let summary = viewModel.rowSummary(for: session, isPromoted: false)
+        XCTAssertLessThanOrEqual(summary.title.count, 75) // 72 + optional ellipsis
+        XCTAssertLessThanOrEqual(summary.preview.count, 163) // 160 + optional ellipsis
+        XCTAssertFalse(summary.preview.contains("\n"))
+    }
 }

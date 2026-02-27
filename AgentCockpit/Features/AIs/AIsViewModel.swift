@@ -137,12 +137,13 @@ final class AIsViewModel {
         let digest = appModel.eventStore.digest(for: session.key)
         let location = locationText(for: session)
         let preview = preferredPreview(for: session, digest: digest, location: location)
+        let title = normalizedTitle(session.name, fallback: session.key)
         let isRunning = sessionIsRunning(session: session, digest: digest)
         let statusLabel = statusText(session: session, digest: digest, isRunning: isRunning)
         let lastActivity = digest?.lastEventAt ?? session.updatedAt ?? normalizedCreatedAt(session.createdAt)
         return SessionRowSummary(
             id: session.key,
-            title: session.name,
+            title: title,
             preview: preview,
             location: location,
             statusLabel: statusLabel,
@@ -183,9 +184,32 @@ final class AIsViewModel {
         for candidate in candidates {
             guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !value.isEmpty else { continue }
-            return value
+            return normalizedSessionPreview(value)
         }
         return location
+    }
+
+    private func normalizedTitle(_ raw: String, fallback: String) -> String {
+        let compact = raw
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(separator: " ")
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = compact.isEmpty ? fallback : compact
+        guard candidate.count > 72 else { return candidate }
+        let limit = candidate.index(candidate.startIndex, offsetBy: 72)
+        return "\(candidate[..<limit])..."
+    }
+
+    private func normalizedSessionPreview(_ text: String) -> String {
+        let compact = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(separator: " ")
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard compact.count > 160 else { return compact }
+        let limit = compact.index(compact.startIndex, offsetBy: 160)
+        return "\(compact[..<limit])..."
     }
 
     private func sessionIsRunning(session: ACSessionEntry, digest: SessionDigest?) -> Bool {
