@@ -448,12 +448,15 @@ enum JSONRPCEventAdapter {
             guard let item = root["item"]?.dictValue else {
                 return (sessionKey, .rawOutput(RawOutputEvent(text: method, hookEvent: method)))
             }
-            let itemType = item["type"]?.stringValue ?? "item"
-            let normalizedItemType = itemType
-                .replacingOccurrences(of: "-", with: "_")
-                .lowercased()
+            let parsedItem = CodexProtocolParser.parseItem(
+                from: item,
+                fallbackTurnID: firstNonEmpty(
+                    root["turnId"]?.stringValue,
+                    root["turn"]?.dictValue?["id"]?.stringValue
+                )
+            )
 
-            if normalizedItemType == "contextcompaction" || normalizedItemType == "context_compaction" {
+            if parsedItem.type == .contextCompaction {
                 return nil
             }
 
@@ -479,11 +482,11 @@ enum JSONRPCEventAdapter {
                 return (sessionKey, .genUI(event))
             }
 
-            if normalizedItemType == "usermessage" || normalizedItemType == "user_message" {
-                let text = userMessageText(from: item)
-                guard !text.isEmpty else { return nil }
+            switch parsedItem.type {
+            case .userMessage:
+                guard !parsedItem.text.isEmpty else { return nil }
                 let itemID = firstNonEmpty(
-                    item["id"]?.stringValue,
+                    parsedItem.id,
                     root["itemId"]?.stringValue
                 ) ?? UUID().uuidString
                 return (
@@ -491,71 +494,62 @@ enum JSONRPCEventAdapter {
                     .rawOutput(
                         RawOutputEvent(
                             id: "codex/\(sessionKey)/user/\(itemID)",
-                            text: "You: \(text)",
+                            text: "You: \(parsedItem.text)",
                             hookEvent: method
                         )
                     )
                 )
-            }
 
-            if normalizedItemType == "agentmessage" || normalizedItemType == "agent_message" {
-                let text = agentMessageText(from: item)
-                guard !text.isEmpty else { return nil }
+            case .agentMessage:
+                guard !parsedItem.text.isEmpty else { return nil }
                 let eventID = reasoningEventID(
                     protocolPrefix: "codex",
                     sessionKey: sessionKey,
                     primaryID: firstNonEmpty(
-                        item["id"]?.stringValue,
+                        parsedItem.id,
                         root["itemId"]?.stringValue,
                         root["item"]?.dictValue?["id"]?.stringValue
                     ),
                     turnID: firstNonEmpty(
-                        item["turnId"]?.stringValue,
+                        parsedItem.turnID,
                         root["turnId"]?.stringValue,
                         root["turn"]?.dictValue?["id"]?.stringValue
                     ),
                     fallback: "agentMessage"
                 )
-                return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: text, isThinking: false)))
-            }
+                return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: parsedItem.text, isThinking: false)))
 
-            if itemType == "reasoning" {
-                let text = reasoningText(from: item)
-                guard !text.isEmpty else { return nil }
+            case .reasoning:
+                guard !parsedItem.text.isEmpty else { return nil }
                 let eventID = reasoningEventID(
                     protocolPrefix: "codex",
                     sessionKey: sessionKey,
                     primaryID: firstNonEmpty(
-                        item["id"]?.stringValue,
+                        parsedItem.id,
                         root["itemId"]?.stringValue,
                         root["item"]?.dictValue?["id"]?.stringValue
                     ),
                     turnID: firstNonEmpty(
-                        item["turnId"]?.stringValue,
+                        parsedItem.turnID,
                         root["turnId"]?.stringValue,
                         root["turn"]?.dictValue?["id"]?.stringValue
                     ),
                     fallback: "reasoning"
                 )
-                return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: text, isThinking: true)))
-            }
+                return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: parsedItem.text, isThinking: true)))
 
-            if normalizedItemType == "commandexecution" || normalizedItemType == "command_execution" {
-                let command = commandText(from: item)
-                let statusRaw = item["status"]?.stringValue ?? ""
+            case .commandExecution:
+                let statusRaw = parsedItem.status ?? ""
                 let status: ToolStatus = switch statusRaw {
                 case "failed", "declined": .error
                 case "completed": .done
                 default: method == "item/completed" ? .done : .running
                 }
-                let output = item["aggregatedOutput"]?.stringValue
-                    ?? item["stderr"]?.stringValue
-                    ?? item["stdout"]?.stringValue
                 let toolID = toolEventID(
                     protocolPrefix: "codex",
                     sessionKey: sessionKey,
                     primaryID: firstNonEmpty(
-                        item["id"]?.stringValue,
+                        parsedItem.id,
                         root["itemId"]?.stringValue
                     ),
                     fallback: "command"
@@ -567,43 +561,38 @@ enum JSONRPCEventAdapter {
                             id: toolID,
                             toolName: "command",
                             phase: status == .running ? .start : .result,
-                            input: command,
-                            result: output,
+                            input: parsedItem.commandText,
+                            result: parsedItem.commandOutput,
                             status: status
                         )
                     )
                 )
-            }
 
-            if normalizedItemType == "filechange" || normalizedItemType == "file_change" {
-                if let changes = item["changes"]?.arrayValue,
-                   let first = changes.first?.dictValue,
-                   let path = first["path"]?.stringValue {
-                    let kind = first["kind"]?.stringValue?.lowercased() ?? ""
-                    let operation: FileOperation = switch kind {
-                    case "delete", "deleted": .delete
-                    case "create", "created", "add", "added": .write
-                    default: .edit
-                    }
-                    let fileID = toolEventID(
-                        protocolPrefix: "codex",
-                        sessionKey: sessionKey,
-                        primaryID: firstNonEmpty(
-                            item["id"]?.stringValue,
-                            root["itemId"]?.stringValue
-                        ),
-                        fallback: "file/\(path)"
+            case .fileChange:
+                guard let change = parsedItem.fileChanges.first else { return nil }
+                let fileID = toolEventID(
+                    protocolPrefix: "codex",
+                    sessionKey: sessionKey,
+                    primaryID: firstNonEmpty(
+                        parsedItem.id,
+                        root["itemId"]?.stringValue
+                    ),
+                    fallback: "file/\(change.path)"
+                )
+                return (
+                    sessionKey,
+                    .fileEdit(
+                        FileEditEvent(
+                            id: fileID,
+                            filePath: change.path,
+                            operation: fileOperation(from: change.kind)
+                        )
                     )
-                    return (sessionKey, .fileEdit(FileEditEvent(id: fileID, filePath: path, operation: operation)))
-                }
-            }
+                )
 
-            if normalizedItemType == "mcptoolcall" || normalizedItemType == "mcp_tool_call"
-                || normalizedItemType == "collabtoolcall" || normalizedItemType == "collab_tool_call" {
-                let toolName = item["tool"]?.stringValue
-                    ?? item["name"]?.stringValue
-                    ?? itemType
-                let statusRaw = item["status"]?.stringValue ?? ""
+            case .mcpToolCall, .collabToolCall:
+                let toolName = parsedItem.toolName ?? "tool"
+                let statusRaw = parsedItem.status ?? ""
                 let status: ToolStatus = switch statusRaw {
                 case "failed": .error
                 case "completed": .done
@@ -613,7 +602,7 @@ enum JSONRPCEventAdapter {
                     protocolPrefix: "codex",
                     sessionKey: sessionKey,
                     primaryID: firstNonEmpty(
-                        item["id"]?.stringValue,
+                        parsedItem.id,
                         root["itemId"]?.stringValue
                     ),
                     fallback: toolName
@@ -625,32 +614,36 @@ enum JSONRPCEventAdapter {
                             id: toolID,
                             toolName: toolName,
                             phase: status == .running ? .start : .result,
-                            input: compactJSONString(from: item["arguments"]?.dictValue ?? [:]),
-                            result: item["result"]?.stringValue,
+                            input: parsedItem.toolArgumentsJSON,
+                            result: parsedItem.toolResult,
                             status: status
                         )
                     )
                 )
-            }
 
-            return (
-                sessionKey,
-                .rawOutput(
-                    RawOutputEvent(
-                        id: toolEventID(
-                            protocolPrefix: "codex",
-                            sessionKey: sessionKey,
-                            primaryID: firstNonEmpty(
-                                item["id"]?.stringValue,
-                                root["itemId"]?.stringValue
+            case .contextCompaction:
+                return nil
+
+            case .unknown(let rawType):
+                return (
+                    sessionKey,
+                    .rawOutput(
+                        RawOutputEvent(
+                            id: toolEventID(
+                                protocolPrefix: "codex",
+                                sessionKey: sessionKey,
+                                primaryID: firstNonEmpty(
+                                    parsedItem.id,
+                                    root["itemId"]?.stringValue
+                                ),
+                                fallback: "item/\(rawType)"
                             ),
-                            fallback: "item/\(itemType)"
-                        ),
-                        text: "Codex item: \(itemType)",
-                        hookEvent: method
+                            text: "Codex item: \(rawType)",
+                            hookEvent: method
+                        )
                     )
                 )
-            )
+            }
 
         case "turn/started", "turn/completed", "thread/started", "thread/status/changed", "thread/tokenUsage/updated":
             return nil
@@ -681,14 +674,6 @@ enum JSONRPCEventAdapter {
         default:
             return nil
         }
-    }
-
-    private static func commandText(from item: [String: AnyCodable]) -> String {
-        if let array = item["command"]?.arrayValue {
-            let parts = array.compactMap(\.stringValue)
-            if !parts.isEmpty { return parts.joined(separator: " ") }
-        }
-        return item["command"]?.stringValue ?? "command"
     }
 
     private static func sessionUpdateText(from update: [String: AnyCodable]) -> String? {
@@ -744,74 +729,15 @@ enum JSONRPCEventAdapter {
         return nil
     }
 
-    private static func userMessageText(from item: [String: AnyCodable]) -> String {
-        if let content = item["content"]?.arrayValue {
-            let parts = content.compactMap { entry -> String? in
-                guard let payload = entry.dictValue else { return entry.stringValue }
-                if payload["type"]?.stringValue == "text" {
-                    return payload["text"]?.stringValue
-                }
-                return nil
-            }
-            let filtered = parts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if !filtered.isEmpty {
-                return filtered.joined(separator: "\n")
-            }
+    private static func fileOperation(from kind: String) -> FileOperation {
+        switch kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "delete", "deleted":
+            return .delete
+        case "create", "created", "add", "added":
+            return .write
+        default:
+            return .edit
         }
-        return item["text"]?.stringValue ?? ""
-    }
-
-    private static func agentMessageText(from item: [String: AnyCodable]) -> String {
-        if let text = item["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !text.isEmpty {
-            return text
-        }
-        if let content = item["content"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !content.isEmpty {
-            return content
-        }
-        if let entries = item["content"]?.arrayValue {
-            let parts = entries.compactMap { entry -> String? in
-                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !text.isEmpty {
-                    return text
-                }
-                guard let payload = entry.dictValue else { return nil }
-                if let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !text.isEmpty {
-                    return text
-                }
-                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !nested.isEmpty {
-                    return nested
-                }
-                return nil
-            }
-            if !parts.isEmpty {
-                return parts.joined(separator: "\n")
-            }
-        }
-        return ""
-    }
-
-    private static func reasoningText(from item: [String: AnyCodable]) -> String {
-        if let text = item["text"]?.stringValue, !text.isEmpty { return text }
-        if let summaryText = item["summary"]?.stringValue, !summaryText.isEmpty { return summaryText }
-        if let summaryItems = item["summary"]?.arrayValue {
-            let parts = summaryItems.compactMap { entry -> String? in
-                if let text = entry.stringValue, !text.isEmpty { return text }
-                guard let payload = entry.dictValue else { return nil }
-                return payload["text"]?.stringValue
-                    ?? payload["summary"]?.stringValue
-            }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if !parts.isEmpty {
-                return parts.joined(separator: "\n")
-            }
-        }
-        return item["content"]?.stringValue ?? ""
     }
 
     private static func firstNonEmpty(_ candidates: String?...) -> String? {

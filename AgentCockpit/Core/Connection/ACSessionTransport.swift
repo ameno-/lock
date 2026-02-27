@@ -684,73 +684,38 @@ public final class ACSessionTransport {
     }
 
     private func parseCodexThreads(from result: AnyCodable?) -> [ACSessionEntry] {
-        guard let dict = result?.dictValue else { return [] }
-        guard let rows = dict["data"]?.arrayValue else { return [] }
-        return rows.compactMap { parseCodexThreadFromListRow($0.dictValue) }
+        CodexProtocolParser.parseThreadList(from: result).map(sessionEntry(from:))
     }
 
     private func parseCodexThread(from result: AnyCodable?) -> ACSessionEntry? {
-        let dict = result?.dictValue ?? [:]
-        let thread = dict["thread"]?.dictValue ?? dict
-        let key = thread["id"]?.stringValue
-        guard let key else { return nil }
-        let statusType = thread["status"]?.dictValue?["type"]?.stringValue
-            ?? thread["status"]?.stringValue
-        let name = bestDisplayName(
-            candidates: [thread["name"]?.stringValue, thread["preview"]?.stringValue],
-            fallback: key
-        )
-        return ACSessionEntry(
-            key: key,
-            name: name,
-            window: "0",
-            pane: "0",
-            running: statusType == "active" || statusType == nil,
-            promoted: false,
-            createdAt: dateFrom(thread["createdAt"]) ?? .now,
-            preview: thread["preview"]?.stringValue,
-            statusText: statusType,
-            updatedAt: dateFrom(thread["updatedAt"])
-        )
+        guard let thread = CodexProtocolParser.parseThread(from: result) else { return nil }
+        return sessionEntry(from: thread)
     }
 
-    private func parseCodexThreadFromListRow(_ row: [String: AnyCodable]?) -> ACSessionEntry? {
-        guard let row else { return nil }
-        guard let key = row["id"]?.stringValue else { return nil }
-        let statusType = row["status"]?.dictValue?["type"]?.stringValue
-        return ACSessionEntry(
-            key: key,
+    private func sessionEntry(from thread: CodexThreadSummary) -> ACSessionEntry {
+        ACSessionEntry(
+            key: thread.id,
             name: bestDisplayName(
-                candidates: [row["name"]?.stringValue, row["preview"]?.stringValue],
-                fallback: key
+                candidates: [thread.name, thread.preview],
+                fallback: thread.id
             ),
             window: "0",
             pane: "0",
-            running: statusType == "active" || statusType == nil,
+            running: thread.isRunning,
             promoted: false,
-            createdAt: dateFrom(row["createdAt"]) ?? .now,
-            preview: row["preview"]?.stringValue,
-            statusText: statusType,
-            updatedAt: dateFrom(row["updatedAt"])
+            createdAt: thread.createdAt ?? .now,
+            preview: thread.preview,
+            statusText: thread.statusType,
+            updatedAt: thread.updatedAt
         )
     }
 
     private func parseCodexHistory(from result: AnyCodable?) -> [CanvasEvent] {
-        let root = result?.dictValue ?? [:]
-        let thread = root["thread"]?.dictValue ?? root
-        let threadKey = thread["id"]?.stringValue ?? "codex"
-        let turns = thread["turns"]?.arrayValue
-            ?? root["turns"]?.arrayValue
-            ?? root["data"]?.dictValue?["turns"]?.arrayValue
-            ?? []
-
+        let snapshot = CodexProtocolParser.parseHistory(from: result)
         var history: [CanvasEvent] = []
-        for turnAny in turns {
-            guard let turn = turnAny.dictValue else { continue }
-            let items = turn["items"]?.arrayValue ?? []
-            for itemAny in items {
-                guard let item = itemAny.dictValue else { continue }
-                history.append(contentsOf: parseCodexHistoryItem(item, threadKey: threadKey))
+        for turn in snapshot.turns {
+            for item in turn.items {
+                history.append(contentsOf: parseCodexHistoryItem(item, threadKey: snapshot.threadID))
             }
         }
         return history
@@ -815,93 +780,93 @@ public final class ACSessionTransport {
         return history
     }
 
-    private func parseCodexHistoryItem(_ item: [String: AnyCodable], threadKey: String) -> [CanvasEvent] {
-        let itemType = canonicalCodexItemType(item["type"]?.stringValue ?? "")
-        let itemID = item["id"]?.stringValue ?? UUID().uuidString
+    private func parseCodexHistoryItem(_ item: CodexItemSnapshot, threadKey: String) -> [CanvasEvent] {
+        let itemID = item.id ?? UUID().uuidString
 
-        if itemType == "userMessage" {
-            let text = userMessageText(from: item)
-            guard !text.isEmpty else { return [] }
+        switch item.type {
+        case .userMessage:
+            guard !item.text.isEmpty else { return [] }
             return [
                 .rawOutput(
                     RawOutputEvent(
                         id: "codex/\(threadKey)/user/\(itemID)",
-                        text: "You: \(text)",
+                        text: "You: \(item.text)",
                         hookEvent: "history/userMessage"
                     )
                 )
             ]
-        }
 
-        if itemType == "agentMessage" {
-            let text = agentMessageText(from: item)
-            guard !text.isEmpty else { return [] }
-            return [.reasoning(ReasoningEvent(id: "codex/\(threadKey)/\(itemID)", text: text, isThinking: false))]
-        }
+        case .agentMessage:
+            guard !item.text.isEmpty else { return [] }
+            return [
+                .reasoning(
+                    ReasoningEvent(
+                        id: "codex/\(threadKey)/\(itemID)",
+                        text: item.text,
+                        isThinking: false
+                    )
+                )
+            ]
 
-        if itemType == "reasoning" {
-            let text = reasoningText(from: item)
-            guard !text.isEmpty else { return [] }
-            return [.reasoning(ReasoningEvent(id: "codex/\(threadKey)/\(itemID)", text: text, isThinking: true))]
-        }
+        case .reasoning:
+            guard !item.text.isEmpty else { return [] }
+            return [
+                .reasoning(
+                    ReasoningEvent(
+                        id: "codex/\(threadKey)/\(itemID)",
+                        text: item.text,
+                        isThinking: true
+                    )
+                )
+            ]
 
-        if itemType == "commandExecution" {
-            let command = commandText(from: item)
-            let status: ToolStatus = switch item["status"]?.stringValue {
-            case "failed", "declined": .error
-            case "completed": .done
-            default: .running
+        case .commandExecution:
+            let status: ToolStatus = switch item.status {
+            case "failed", "declined":
+                .error
+            case "completed":
+                .done
+            default:
+                .running
             }
-            let output = item["aggregatedOutput"]?.stringValue
-                ?? item["stderr"]?.stringValue
-                ?? item["stdout"]?.stringValue
             return [
                 .toolUse(
                     ToolUseEvent(
                         id: "codex/\(threadKey)/tool/\(itemID)",
                         toolName: "command",
                         phase: status == .running ? .start : .result,
-                        input: command,
-                        result: output,
+                        input: item.commandText,
+                        result: item.commandOutput,
                         status: status
                     )
                 )
             ]
-        }
 
-        if itemType == "fileChange",
-           let changes = item["changes"]?.arrayValue,
-           let first = changes.first?.dictValue,
-           let path = first["path"]?.stringValue {
-            let kind = first["kind"]?.stringValue?.lowercased() ?? ""
-            let operation: FileOperation = switch kind {
-            case "delete", "deleted": .delete
-            case "create", "created", "add", "added": .write
-            default: .edit
-            }
-            return [.fileEdit(FileEditEvent(id: "codex/\(threadKey)/tool/\(itemID)", filePath: path, operation: operation))]
-        }
+        case .fileChange:
+            guard let change = item.fileChanges.first else { return [] }
+            return [
+                .fileEdit(
+                    FileEditEvent(
+                        id: "codex/\(threadKey)/tool/\(itemID)",
+                        filePath: change.path,
+                        operation: fileOperation(from: change.kind)
+                    )
+                )
+            ]
 
-        return []
+        default:
+            return []
+        }
     }
 
-    private func canonicalCodexItemType(_ rawType: String) -> String {
-        let normalized = rawType.replacingOccurrences(of: "-", with: "_").lowercased()
-        switch normalized {
-        case "user_message":
-            return "userMessage"
-        case "agent_message":
-            return "agentMessage"
-        case "command_execution":
-            return "commandExecution"
-        case "file_change":
-            return "fileChange"
-        case "mcp_tool_call":
-            return "mcpToolCall"
-        case "collab_tool_call":
-            return "collabToolCall"
+    private func fileOperation(from kind: String) -> FileOperation {
+        switch kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "delete", "deleted":
+            return .delete
+        case "create", "created", "add", "added":
+            return .write
         default:
-            return rawType
+            return .edit
         }
     }
 
@@ -911,41 +876,6 @@ public final class ACSessionTransport {
             if !parts.isEmpty { return parts.joined(separator: " ") }
         }
         return item["command"]?.stringValue ?? "command"
-    }
-
-    private func userMessageText(from item: [String: AnyCodable]) -> String {
-        if let text = item["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !text.isEmpty {
-            return text
-        }
-        if let content = item["content"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !content.isEmpty {
-            return content
-        }
-        if let entries = item["content"]?.arrayValue {
-            let parts = entries.compactMap { entry -> String? in
-                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !text.isEmpty {
-                    return text
-                }
-                guard let payload = entry.dictValue else { return nil }
-                if payload["type"]?.stringValue == "text",
-                   let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !text.isEmpty {
-                    return text
-                }
-                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !nested.isEmpty {
-                    return nested
-                }
-                return nil
-            }
-            if !parts.isEmpty {
-                return parts.joined(separator: "\n")
-            }
-        }
-        return ""
     }
 
     private static func historyMessageText(from message: [String: AnyCodable]) -> String {
@@ -966,44 +896,6 @@ public final class ACSessionTransport {
         if let entries = message["content"]?.arrayValue {
             let parts = entries.compactMap { entry -> String? in
                 if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-                    return text
-                }
-                guard let payload = entry.dictValue else { return nil }
-                if let text = payload["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !text.isEmpty {
-                    return text
-                }
-                if let nested = payload["content"]?.dictValue?["text"]?.stringValue?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !nested.isEmpty {
-                    return nested
-                }
-                return nil
-            }
-            if !parts.isEmpty {
-                return parts.joined(separator: "\n")
-            }
-        }
-        return ""
-    }
-
-    private func agentMessageText(from item: [String: AnyCodable]) -> String {
-        if let text = item["text"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !text.isEmpty {
-            return text
-        }
-        if let content = item["content"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !content.isEmpty {
-            return content
-        }
-        if let message = item["message"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !message.isEmpty {
-            return message
-        }
-        if let entries = item["content"]?.arrayValue {
-            let parts = entries.compactMap { entry -> String? in
-                if let text = entry.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !text.isEmpty {
                     return text
                 }
                 guard let payload = entry.dictValue else { return nil }
@@ -1090,24 +982,6 @@ public final class ACSessionTransport {
         }
 
         return parsedQuestions
-    }
-
-    private func reasoningText(from item: [String: AnyCodable]) -> String {
-        if let text = item["text"]?.stringValue, !text.isEmpty { return text }
-        if let summaryText = item["summary"]?.stringValue, !summaryText.isEmpty { return summaryText }
-        if let summaryItems = item["summary"]?.arrayValue {
-            let parts = summaryItems.compactMap { entry -> String? in
-                if let text = entry.stringValue, !text.isEmpty { return text }
-                guard let payload = entry.dictValue else { return nil }
-                return payload["text"]?.stringValue
-                    ?? payload["summary"]?.stringValue
-            }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if !parts.isEmpty {
-                return parts.joined(separator: "\n")
-            }
-        }
-        return item["content"]?.stringValue ?? ""
     }
 
     private func bestDisplayName(candidates: [String?], fallback: String) -> String {

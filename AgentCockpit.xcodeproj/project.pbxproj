@@ -11,6 +11,7 @@
 		121CDA8E2F6B44348742AD29 /* ACPSessionHistoryParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */; };
 		12F01E03412BE241AB48B649 /* ReasoningCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 885EF6EC02BE143E83CB023C /* ReasoningCard.swift */; };
 		161DD93CFFF4A7775ED089A5 /* CardBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CAAA2727A9F368B8BE9627F /* CardBase.swift */; };
+		1B5CCD2771AD05E90F32EFAF /* CodexProtocolParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511FA187BEB259DFDB587470 /* CodexProtocolParser.swift */; };
 		24563A496880D7171E6082C3 /* JSONRPCEventAdapterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B281571F0021FF53FF92B31E /* JSONRPCEventAdapterTests.swift */; };
 		33AE9F8A3C71B4802A62E265 /* SnippetLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF92893FBD541BC318462C8 /* SnippetLoader.swift */; };
 		348AA70002E120B37CDB10C7 /* KeyboardInputMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4093DAA6DE4419DDFFDDD2 /* KeyboardInputMode.swift */; };
@@ -49,6 +50,7 @@
 		EE2EB05969E6DBEA18A86CD6 /* AgentRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C27F4FF9F2708AF640F1A96 /* AgentRowView.swift */; };
 		F207134725AD95550A487851 /* AgenticKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B355DB3EE5DBF25DD6B55DD /* AgenticKeyboard.swift */; };
 		F9C91B3067EC0809FAFF7757 /* AssistantTextParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ED95A1173253717E5F5B27 /* AssistantTextParser.swift */; };
+		FDD5E95428F54AE234EAEBB9 /* CodexProtocolParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +78,7 @@
 		47C4E7870AB81F6C8C6E39D2 /* RawOutputCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawOutputCard.swift; sourceTree = "<group>"; };
 		4B355DB3EE5DBF25DD6B55DD /* AgenticKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgenticKeyboard.swift; sourceTree = "<group>"; };
 		4CAAA2727A9F368B8BE9627F /* CardBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardBase.swift; sourceTree = "<group>"; };
+		511FA187BEB259DFDB587470 /* CodexProtocolParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProtocolParser.swift; sourceTree = "<group>"; };
 		571B2416E216EACD84289370 /* EventCardRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCardRouter.swift; sourceTree = "<group>"; };
 		59570ED00CD2D608BA8EB2F4 /* AgentCockpitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AgentCockpitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5B845FE5C1469E72E717E5D0 /* AIsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIsViewModel.swift; sourceTree = "<group>"; };
@@ -99,6 +102,7 @@
 		B281571F0021FF53FF92B31E /* JSONRPCEventAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONRPCEventAdapterTests.swift; sourceTree = "<group>"; };
 		B3D68F90B83811799B3E6901 /* WorkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkViewModel.swift; sourceTree = "<group>"; };
 		BA07F23F0012FD78FA768AC3 /* EventCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCanvasView.swift; sourceTree = "<group>"; };
+		BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProtocolParserTests.swift; sourceTree = "<group>"; };
 		CBBA42DA316BD9180C6DA2DA /* FileEditCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileEditCard.swift; sourceTree = "<group>"; };
 		DC4093DAA6DE4419DDFFDDD2 /* KeyboardInputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardInputMode.swift; sourceTree = "<group>"; };
 		E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACPSessionHistoryParsingTests.swift; sourceTree = "<group>"; };
@@ -125,6 +129,7 @@
 			children = (
 				E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */,
 				FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */,
+				BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */,
 				B281571F0021FF53FF92B31E /* JSONRPCEventAdapterTests.swift */,
 			);
 			path = AgentCockpitTests;
@@ -179,6 +184,7 @@
 			isa = PBXGroup;
 			children = (
 				AB079F1A65BF171049005EF3 /* ACProtocol.swift */,
+				511FA187BEB259DFDB587470 /* CodexProtocolParser.swift */,
 			);
 			path = Protocol;
 			sourceTree = "<group>";
@@ -412,6 +418,7 @@
 			files = (
 				121CDA8E2F6B44348742AD29 /* ACPSessionHistoryParsingTests.swift in Sources */,
 				A14664505F3DD459DBB3F974 /* AgentEventStoreGenUITests.swift in Sources */,
+				FDD5E95428F54AE234EAEBB9 /* CodexProtocolParserTests.swift in Sources */,
 				24563A496880D7171E6082C3 /* JSONRPCEventAdapterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -437,6 +444,7 @@
 				F9C91B3067EC0809FAFF7757 /* AssistantTextParser.swift in Sources */,
 				34B77649F81A60241D04198B /* CanvasEvent.swift in Sources */,
 				161DD93CFFF4A7775ED089A5 /* CardBase.swift in Sources */,
+				1B5CCD2771AD05E90F32EFAF /* CodexProtocolParser.swift in Sources */,
 				4F19685F199B25DB198AD165 /* EventCanvasView.swift in Sources */,
 				D0B691B6CBCCC26D472DAB1C /* EventCardRouter.swift in Sources */,
 				D262B05E324C2E93D2F31050 /* FileEditCard.swift in Sources */,
