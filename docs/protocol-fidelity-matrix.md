@@ -53,6 +53,7 @@ This matrix tracks runtime fidelity for AgentCockpit across:
 | Prompt send path | ✅ | Verified in simulator with live round-trip. |
 | Duplicate local user echo | ✅ fixed | Removed optimistic local echo to avoid duplicate `You:` rows. |
 | Duplicate assistant punctuation variants | ✅ fixed | Reasoning merge now normalizes and fingerprints text before append. |
+| Codex history/update merge continuity | ✅ improved | Hydrated `thread/read` messages now share turn-scoped IDs with follow-up `item/*` updates. |
 | Raw event noise | ✅ improved | Technical hooks (`item/*`, `thread/*`, `session/*`) hidden in raw cards. |
 | GenUI feature safety | ✅ | Settings toggle disables GenUI rendering and degrades to raw output cards. |
 | GenUI upsert semantics | ✅ | Snapshot/patch merge behavior now handled in `AgentEventStore`. |
@@ -84,9 +85,12 @@ Minimum gate before rollout:
 
 ## Automated Evidence
 
-- `AgentCockpitTests` added and passing (`7` tests):
+- `AgentCockpitTests` passing (`23` tests):
   - ACP history mapping
+  - Codex history turn-scoped event ID mapping
+  - Codex history + delta merge continuity
   - Codex delta ID coalescing
+  - Codex item/completed turn-scoped coalescing
   - GenUI disabled fallback
   - GenUI schema gate
   - GenUI patch mode mapping

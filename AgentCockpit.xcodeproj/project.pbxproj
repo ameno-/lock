@@ -46,6 +46,7 @@
 		D0B691B6CBCCC26D472DAB1C /* EventCardRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571B2416E216EACD84289370 /* EventCardRouter.swift */; };
 		D262B05E324C2E93D2F31050 /* FileEditCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBA42DA316BD9180C6DA2DA /* FileEditCard.swift */; };
 		D2C5542864EB2D26BB9BD764 /* GitDiffCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B70EEB59C2F5C4378D36F61 /* GitDiffCard.swift */; };
+		D4EC643572C86841023E2894 /* CodexHistoryMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0108AA89318C9E01F26169 /* CodexHistoryMergeTests.swift */; };
 		D675143AF46167824CE26ED6 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = B37870267187CBB69CE25764 /* MarkdownUI */; };
 		E13D9C145DDA91C71D2C2CE9 /* snippet-templates.json in Resources */ = {isa = PBXBuildFile; fileRef = 123F7160DCE1E46AAA2CD33F /* snippet-templates.json */; };
 		E9993BD71B9AF4BB6C5930D1 /* ACSessionTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B78004586AD3F460010C5EC /* ACSessionTransport.swift */; };
@@ -91,6 +92,7 @@
 		71643E00073ED7D85F75A7C2 /* tool-display.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "tool-display.json"; sourceTree = "<group>"; };
 		71FEB71920ADB027916B5601 /* SubAgentTickerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAgentTickerBar.swift; sourceTree = "<group>"; };
 		7728CBEC53AA85C1A29849F3 /* ToolUseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolUseCard.swift; sourceTree = "<group>"; };
+		7A0108AA89318C9E01F26169 /* CodexHistoryMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHistoryMergeTests.swift; sourceTree = "<group>"; };
 		7C27F4FF9F2708AF640F1A96 /* AgentRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRowView.swift; sourceTree = "<group>"; };
 		885EF6EC02BE143E83CB023C /* ReasoningCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningCard.swift; sourceTree = "<group>"; };
 		9171183E0945D10BFC7FDA64 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -137,6 +139,7 @@
 				E08E0297162B1119B11BCFDD /* ACPSessionHistoryParsingTests.swift */,
 				FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */,
 				FBB42B335736713118836671 /* AIsViewModelFilterTests.swift */,
+				7A0108AA89318C9E01F26169 /* CodexHistoryMergeTests.swift */,
 				BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */,
 				B281571F0021FF53FF92B31E /* JSONRPCEventAdapterTests.swift */,
 			);
@@ -429,6 +432,7 @@
 				121CDA8E2F6B44348742AD29 /* ACPSessionHistoryParsingTests.swift in Sources */,
 				124D912643B1007C25C6D399 /* AIsViewModelFilterTests.swift in Sources */,
 				A14664505F3DD459DBB3F974 /* AgentEventStoreGenUITests.swift in Sources */,
+				D4EC643572C86841023E2894 /* CodexHistoryMergeTests.swift in Sources */,
 				FDD5E95428F54AE234EAEBB9 /* CodexProtocolParserTests.swift in Sources */,
 				24563A496880D7171E6082C3 /* JSONRPCEventAdapterTests.swift in Sources */,
 			);

@@ -711,6 +711,10 @@ public final class ACSessionTransport {
     }
 
     private func parseCodexHistory(from result: AnyCodable?) -> [CanvasEvent] {
+        Self.mapCodexHistory(from: result)
+    }
+
+    static func mapCodexHistory(from result: AnyCodable?) -> [CanvasEvent] {
         let snapshot = CodexProtocolParser.parseHistory(from: result)
         var history: [CanvasEvent] = []
         for turn in snapshot.turns {
@@ -780,7 +784,7 @@ public final class ACSessionTransport {
         return history
     }
 
-    private func parseCodexHistoryItem(_ item: CodexItemSnapshot, threadKey: String) -> [CanvasEvent] {
+    private static func parseCodexHistoryItem(_ item: CodexItemSnapshot, threadKey: String) -> [CanvasEvent] {
         let itemID = item.id ?? UUID().uuidString
 
         switch item.type {
@@ -801,7 +805,11 @@ public final class ACSessionTransport {
             return [
                 .reasoning(
                     ReasoningEvent(
-                        id: "codex/\(threadKey)/\(itemID)",
+                        id: codexReasoningEventID(
+                            threadKey: threadKey,
+                            item: item,
+                            fallback: "agentMessage"
+                        ),
                         text: item.text,
                         isThinking: false
                     )
@@ -813,7 +821,11 @@ public final class ACSessionTransport {
             return [
                 .reasoning(
                     ReasoningEvent(
-                        id: "codex/\(threadKey)/\(itemID)",
+                        id: codexReasoningEventID(
+                            threadKey: threadKey,
+                            item: item,
+                            fallback: "reasoning"
+                        ),
                         text: item.text,
                         isThinking: true
                     )
@@ -859,7 +871,25 @@ public final class ACSessionTransport {
         }
     }
 
-    private func fileOperation(from kind: String) -> FileOperation {
+    private static func codexReasoningEventID(
+        threadKey: String,
+        item: CodexItemSnapshot,
+        fallback: String
+    ) -> String {
+        if let turnID = item.turnID?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !turnID.isEmpty {
+            return "codex/\(threadKey)/turn/\(turnID)/\(fallback)"
+        }
+        if let itemID = item.id?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !itemID.isEmpty {
+            return "codex/\(threadKey)/\(itemID)"
+        }
+        return "codex/\(threadKey)/\(fallback)"
+    }
+
+    private static func fileOperation(from kind: String) -> FileOperation {
         switch kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "delete", "deleted":
             return .delete

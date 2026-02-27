@@ -451,38 +451,40 @@ enum JSONRPCEventAdapter {
 
             case .agentMessage:
                 guard !parsedItem.text.isEmpty else { return nil }
+                let turnID = firstNonEmpty(
+                    parsedItem.turnID,
+                    root["turnId"]?.stringValue,
+                    root["turn"]?.dictValue?["id"]?.stringValue
+                )
                 let eventID = reasoningEventID(
                     protocolPrefix: "codex",
                     sessionKey: sessionKey,
-                    primaryID: firstNonEmpty(
+                    primaryID: turnID == nil ? firstNonEmpty(
                         parsedItem.id,
                         root["itemId"]?.stringValue,
                         root["item"]?.dictValue?["id"]?.stringValue
-                    ),
-                    turnID: firstNonEmpty(
-                        parsedItem.turnID,
-                        root["turnId"]?.stringValue,
-                        root["turn"]?.dictValue?["id"]?.stringValue
-                    ),
+                    ) : nil,
+                    turnID: turnID,
                     fallback: "agentMessage"
                 )
                 return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: parsedItem.text, isThinking: false)))
 
             case .reasoning:
                 guard !parsedItem.text.isEmpty else { return nil }
+                let turnID = firstNonEmpty(
+                    parsedItem.turnID,
+                    root["turnId"]?.stringValue,
+                    root["turn"]?.dictValue?["id"]?.stringValue
+                )
                 let eventID = reasoningEventID(
                     protocolPrefix: "codex",
                     sessionKey: sessionKey,
-                    primaryID: firstNonEmpty(
+                    primaryID: turnID == nil ? firstNonEmpty(
                         parsedItem.id,
                         root["itemId"]?.stringValue,
                         root["item"]?.dictValue?["id"]?.stringValue
-                    ),
-                    turnID: firstNonEmpty(
-                        parsedItem.turnID,
-                        root["turnId"]?.stringValue,
-                        root["turn"]?.dictValue?["id"]?.stringValue
-                    ),
+                    ) : nil,
+                    turnID: turnID,
                     fallback: "reasoning"
                 )
                 return (sessionKey, .reasoning(ReasoningEvent(id: eventID, text: parsedItem.text, isThinking: true)))

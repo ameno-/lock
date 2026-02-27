@@ -88,6 +88,47 @@ final class JSONRPCEventAdapterTests: XCTestCase {
         XCTAssertEqual(firstReasoning.id, secondReasoning.id)
     }
 
+    func testCodexItemCompletedUsesTurnScopedIDWhenTurnPresent() {
+        let first = JSONRPCEventAdapter.map(
+            protocolMode: .codex,
+            method: "item/completed",
+            params: [
+                "threadId": AnyCodable("thread-1"),
+                "turnId": AnyCodable("turn-1"),
+                "item": AnyCodable([
+                    "id": AnyCodable("item-1"),
+                    "type": AnyCodable("agent_message"),
+                    "text": AnyCodable("Hello")
+                ])
+            ],
+            genuiEnabled: true,
+            fallbackSessionKey: nil
+        )
+        let second = JSONRPCEventAdapter.map(
+            protocolMode: .codex,
+            method: "item/completed",
+            params: [
+                "threadId": AnyCodable("thread-1"),
+                "turnId": AnyCodable("turn-1"),
+                "item": AnyCodable([
+                    "id": AnyCodable("item-2"),
+                    "type": AnyCodable("agent_message"),
+                    "text": AnyCodable("Hello again")
+                ])
+            ],
+            genuiEnabled: true,
+            fallbackSessionKey: nil
+        )
+
+        guard case let .reasoning(firstReasoning)? = first?.event,
+              case let .reasoning(secondReasoning)? = second?.event else {
+            return XCTFail("Expected reasoning events for codex item/completed")
+        }
+
+        XCTAssertEqual(firstReasoning.id, secondReasoning.id)
+        XCTAssertEqual(firstReasoning.id, "codex/thread-1/turn/turn-1/agentMessage")
+    }
+
     func testGenUIDisabledFallsBackToRawOutput() {
         let mapped = JSONRPCEventAdapter.map(
             protocolMode: .acp,
