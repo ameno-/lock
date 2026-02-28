@@ -49,6 +49,9 @@ public struct ACPendingUserInputRequest: Identifiable, Sendable {
 @Observable
 @MainActor
 public final class ACSessionTransport {
+    typealias JSONRequestHandler =
+        @MainActor (String, [String: AnyCodable]?, UInt64) async throws -> AnyCodable?
+
     public enum GenUIActionCallbackDiagnostic: Sendable, Equatable {
         case method(String)
         case notAdvertised
@@ -65,6 +68,7 @@ public final class ACSessionTransport {
 
     private let connection: ACGatewayConnection
     private let settings: ACSettingsStore
+    private let jsonRequestHandler: JSONRequestHandler?
 
     private var pendingJSONRequests: [String: CheckedContinuation<AnyCodable?, Error>] = [:]
     private var requestCounter = 0
@@ -89,6 +93,17 @@ public final class ACSessionTransport {
     public init(connection: ACGatewayConnection, settings: ACSettingsStore) {
         self.connection = connection
         self.settings = settings
+        self.jsonRequestHandler = nil
+    }
+
+    init(
+        connection: ACGatewayConnection,
+        settings: ACSettingsStore,
+        jsonRequestHandler: JSONRequestHandler?
+    ) {
+        self.connection = connection
+        self.settings = settings
+        self.jsonRequestHandler = jsonRequestHandler
     }
 
     public func resetConnectionLifecycle() {
@@ -347,22 +362,20 @@ public final class ACSessionTransport {
         case .acp:
             try await ensureACPSessionLoaded(sessionKey: sessionKey)
             payload["sessionId"] = AnyCodable(sessionKey)
-            guard let method = resolvedGenUIActionMethod(for: .acp) else {
-                throw ACTransportError.invalidRequest(
-                    "Server does not advertise a GenUI action callback method for ACP."
-                )
-            }
-            _ = try await requestJSON(method: method, params: payload)
+            try await submitGenUIAction(
+                payload: payload,
+                protocolMode: .acp,
+                methodUnavailableMessage: "Server does not advertise a GenUI action callback method for ACP."
+            )
 
         case .codex:
             try await ensureCodexThreadResumed(sessionKey: sessionKey)
             payload["threadId"] = AnyCodable(sessionKey)
-            guard let method = resolvedGenUIActionMethod(for: .codex) else {
-                throw ACTransportError.invalidRequest(
-                    "Connected Codex server does not advertise GenUI action callbacks."
-                )
-            }
-            _ = try await requestJSON(method: method, params: payload)
+            try await submitGenUIAction(
+                payload: payload,
+                protocolMode: .codex,
+                methodUnavailableMessage: "Connected Codex server does not advertise GenUI action callbacks."
+            )
         }
     }
 
@@ -385,6 +398,10 @@ public final class ACSessionTransport {
         params: [String: AnyCodable]? = nil,
         timeoutSeconds: UInt64 = 15
     ) async throws -> AnyCodable? {
+        if let jsonRequestHandler {
+            return try await jsonRequestHandler(method, params, timeoutSeconds)
+        }
+
         requestCounter += 1
         let id = "rpc-\(requestCounter)"
         let msg = ACJSONRPCRequestMessage(id: id, method: method, params: params)
@@ -463,6 +480,46 @@ public final class ACSessionTransport {
             return resolved
         }
         return nil
+    }
+
+    private func submitGenUIAction(
+        payload: [String: AnyCodable],
+        protocolMode: ACServerProtocol,
+        methodUnavailableMessage: String
+    ) async throws {
+        let preferredMethod = resolvedGenUIActionMethod(for: protocolMode)
+        let methodCandidates = Self.genUIActionMethodProbeOrder(
+            for: protocolMode,
+            preferredMethod: preferredMethod
+        )
+
+        guard !methodCandidates.isEmpty else {
+            throw ACTransportError.invalidRequest(methodUnavailableMessage)
+        }
+
+        var attemptedMethods: [String] = []
+        for method in methodCandidates {
+            attemptedMethods.append(method)
+            do {
+                _ = try await requestJSON(method: method, params: payload)
+                negotiatedGenUIActionMethodByProtocol[protocolMode] = method
+                return
+            } catch ACTransportError.serverError(let code, _) where code == -32601 {
+                continue
+            }
+        }
+
+        let triedList = attemptedMethods.joined(separator: ", ")
+        if preferredMethod == nil {
+            throw ACTransportError.invalidRequest(
+                "\(methodUnavailableMessage) Tried fallback methods: \(triedList)."
+            )
+        }
+
+        throw ACTransportError.serverError(
+            -32601,
+            "GenUI action callback method not found. Tried: \(triedList)"
+        )
     }
 
     private func cacheACPSessionDirectories(from sessions: [ACSessionEntry]) {
@@ -1244,6 +1301,31 @@ public final class ACSessionTransport {
                 "item/gen_ui/action",
             ]
         }
+    }
+
+    nonisolated static func genUIActionMethodProbeOrder(
+        for protocolMode: ACServerProtocol,
+        preferredMethod: String?
+    ) -> [String] {
+        var orderedMethods: [String] = []
+        var normalizedSeen: Set<String> = []
+
+        if let preferredMethod {
+            let normalized = preferredMethod.lowercased()
+            orderedMethods.append(preferredMethod)
+            normalizedSeen.insert(normalized)
+        }
+
+        for candidate in genUIActionMethodCandidates(for: protocolMode) {
+            let normalized = candidate.lowercased()
+            if normalizedSeen.contains(normalized) {
+                continue
+            }
+            orderedMethods.append(candidate)
+            normalizedSeen.insert(normalized)
+        }
+
+        return orderedMethods
     }
 
     nonisolated static func negotiateGenUIActionMethod(

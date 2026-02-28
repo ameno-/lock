@@ -25,8 +25,9 @@ struct WorkView: View {
                 if viewModel.canvasEvents.isEmpty {
                     emptyState
                 } else {
-                    EventCanvasView(
+                    WorkTranscriptView(
                         events: viewModel.canvasEvents,
+                        displayMode: appModel.settings.transcriptDisplayMode,
                         onViewSubAgentInAIs: { _ in
                             appModel.selectedTab = .sessions
                         },

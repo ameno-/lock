@@ -100,4 +100,58 @@ final class ACSessionTransportGenUINegotiationTests: XCTestCase {
 
         XCTAssertEqual(method, "item/genui/action")
     }
+
+    func testProbeOrderPrefersCachedMethodAndDeduplicatesCandidatesCaseInsensitive() {
+        let methods = ACSessionTransport.genUIActionMethodProbeOrder(
+            for: .codex,
+            preferredMethod: "ITEM/GEN_UI/ACTION"
+        )
+
+        XCTAssertEqual(methods.first, "ITEM/GEN_UI/ACTION")
+        XCTAssertEqual(Set(methods.map { $0.lowercased() }).count, methods.count)
+    }
+
+    @MainActor
+    func testSubmitGenUIActionFallsBackWhenCodexDoesNotAdvertiseMethodAndCachesSuccess() async throws {
+        let settings = ACSettingsStore()
+        settings.serverProtocol = .codex
+
+        let connection = ACGatewayConnection(settings: settings)
+        var requestedMethods: [String] = []
+        let transport = ACSessionTransport(
+            connection: connection,
+            settings: settings,
+            jsonRequestHandler: { method, _, _ in
+                requestedMethods.append(method)
+                switch method {
+                case "initialize", "thread/resume", "gen_ui/action":
+                    return AnyCodable([String: AnyCodable]())
+                case "genui/action", "genui/submitAction":
+                    throw ACTransportError.serverError(-32601, "Method not found")
+                default:
+                    XCTFail("Unexpected method call: \(method)")
+                    throw ACTransportError.serverError(-32601, "Unexpected method")
+                }
+            }
+        )
+        let event = GenUIEvent(
+            title: "Action",
+            body: "Execute action",
+            actionPayload: ["actionId": AnyCodable("approve")]
+        )
+
+        XCTAssertEqual(transport.activeGenUIActionCallbackDiagnostic, .notAdvertised)
+        XCTAssertEqual(requestedMethods, [])
+
+        try await transport.submitGenUIAction(sessionKey: "thread-1", event: event)
+        XCTAssertEqual(transport.activeGenUIActionCallbackDiagnostic, .method("gen_ui/action"))
+        XCTAssertEqual(
+            requestedMethods,
+            ["initialize", "thread/resume", "genui/action", "genui/submitAction", "gen_ui/action"]
+        )
+
+        requestedMethods.removeAll()
+        try await transport.submitGenUIAction(sessionKey: "thread-1", event: event)
+        XCTAssertEqual(requestedMethods, ["gen_ui/action"])
+    }
 }

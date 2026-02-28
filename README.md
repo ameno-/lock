@@ -56,7 +56,7 @@ This project is optimized for mobile access to active coding sessions:
 | ACP lifecycle | `initialize`, `session/new`, `session/list`, `session/prompt`, `session/load/session/resume` fallback | Broad ACP method/event support including permission, fs, terminal |
 | Codex lifecycle | `initialize`, `thread/start/list/read/resume`, `turn/start` | Broad Codex surface (`thread/*`, `turn/*`, `item/*`, config, model, skills, account, approvals) |
 | Server-initiated requests | Interactive approval + user-input queues with explicit responses | Structured handling of approval and user-input flows |
-| Event rendering | Agmente-style session-first UI + canvas cards (tool/reasoning/git/file/subagent/raw/genui) | Rich transcript model with protocol-specific mapping and diffing |
+| Event rendering | Session-first transcript + canvas hybrid (tool/reasoning/git/file/subagent/raw/genui) with display modes (`standard`/`debug`/`textOnly`) | Rich transcript model with protocol-specific mapping and diffing |
 | Session summaries | Includes protocol label, status, token usage, activity, cwd/location | Rich thread/session metadata parsing and persistence |
 | Remote hardening | Bearer + optional Cloudflare Access headers | Bearer + optional Cloudflare Access headers |
 
@@ -79,7 +79,9 @@ Implemented in this iteration:
 - ACP and Codex request flows for session/thread creation, list, hydration, prompt/turn
 - session-first Agmente-style mobile navigation and cards
 - explicit approval and request-user-input handling in Work view
-- GenUI event routing + renderer card scaffold
+- GenUI event routing + component renderer + persisted surface/action state
+- GenUI action callback fallback probing and method caching for ACP/Codex
+- transcript-mode rendering with GenUI-aware scaffold suppression and debug/text-only views
 - ACP session list parsing hardening (`id/title/cwd/timestamps` variants)
 - auth header support (Bearer + Cloudflare Access)
 
@@ -88,7 +90,7 @@ Recommended next increments:
 1. Complete typed ACP `session/update` mapping for all tool/result metadata variants.
 2. Add persisted local session/thread index for reconnect/offline continuity.
 3. Add protocol fixtures and e2e verification gates for ACP/Codex/`pi-acp`.
-4. Expand GenUI contract validation and action callback coverage.
+4. Wire `pi-acp` command/mode updates into composer UX (`available_commands_update`, `current_mode_update`).
 
 ## External references
 

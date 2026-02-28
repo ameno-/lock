@@ -1,6 +1,6 @@
 # Protocol Fidelity Matrix
 
-Last updated: 2026-02-27
+Last updated: 2026-02-28
 
 ## Scope
 
@@ -57,6 +57,8 @@ This matrix tracks runtime fidelity for AgentCockpit across:
 | Raw event noise | ✅ improved | Technical hooks (`item/*`, `thread/*`, `session/*`) hidden in raw cards. |
 | GenUI feature safety | ✅ | Settings toggle disables GenUI rendering and degrades to raw output cards. |
 | GenUI upsert semantics | ✅ | Snapshot/patch merge behavior now handled in `AgentEventStore`. |
+| Transcript display-mode policy | ✅ | `WorkTranscriptView` supports `standard`, `debug`, and `textOnly` with GenUI scaffold suppression rules. |
+| GenUI callback transport resilience | ✅ | Action submission now probes fallback methods on `-32601` and caches successful callback method per protocol. |
 | Composer ergonomics | ✅ improved | Compact message composer replaces oversized modifier strip layout. |
 
 ## Agmente Parity Gaps (Intentional / Pending)
@@ -66,7 +68,6 @@ This matrix tracks runtime fidelity for AgentCockpit across:
 | Full transcript diffing/merge semantics | Partial | `ac-e3p.9` fixture verification expansion |
 | Extended model/skills/account surfaces | Not yet | follow-up codex parity bead |
 | Persisted offline transcript index | Not yet | follow-up persistence bead |
-| Expanded GenUI action callback contracts | Partial | `ac-e3p.7` + `ac-e3p.8` |
 
 ## Verification Gates
 
@@ -81,11 +82,12 @@ Minimum gate before rollout:
 7. No repeated assistant line caused only by punctuation/token spacing variants.
 8. GenUI disabled mode falls back safely to raw output.
 9. ACP history load populates user/assistant/system replay cards.
-10. Fixture tests pass for ACP history, Codex delta coalescing, and GenUI schema/mode handling.
+10. GenUI action callbacks succeed when method advertisement is incomplete (fallback probe path).
+11. Fixture tests pass for ACP history, Codex delta coalescing, and GenUI schema/mode handling.
 
 ## Automated Evidence
 
-- `AgentCockpitTests` passing (`23` tests):
+- `AgentCockpitTests` passing (`77` tests):
   - ACP history mapping
   - Codex history turn-scoped event ID mapping
   - Codex history + delta merge continuity
@@ -95,3 +97,5 @@ Minimum gate before rollout:
   - GenUI schema gate
   - GenUI patch mode mapping
   - GenUI store patch merge + snapshot replacement
+  - GenUI callback negotiation + fallback probe/caching
+  - Transcript display mode mapping and scaffold suppression
