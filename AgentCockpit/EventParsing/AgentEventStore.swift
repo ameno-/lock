@@ -118,6 +118,51 @@ public final class AgentEventStore {
         sessionDigests[sessionKey]
     }
 
+    public func exportGenUISurfacesBySession() -> [String: [GenUIEvent]] {
+        var output: [String: [GenUIEvent]] = [:]
+
+        for (sessionKey, events) in sessionEvents {
+            var latestBySurface: [String: GenUIEvent] = [:]
+
+            for event in events {
+                guard case .genUI(let genui) = event else { continue }
+                if let existing = latestBySurface[genui.surfaceID] {
+                    if genui.revision > existing.revision
+                        || (genui.revision == existing.revision && genui.timestamp >= existing.timestamp) {
+                        latestBySurface[genui.surfaceID] = genui
+                    }
+                } else {
+                    latestBySurface[genui.surfaceID] = genui
+                }
+            }
+
+            if !latestBySurface.isEmpty {
+                output[sessionKey] = latestBySurface.values
+                    .sorted { lhs, rhs in
+                        if lhs.revision != rhs.revision {
+                            return lhs.revision < rhs.revision
+                        }
+                        return lhs.timestamp < rhs.timestamp
+                    }
+            }
+        }
+
+        return output
+    }
+
+    public func restoreGenUISurfacesBySession(_ surfacesBySession: [String: [GenUIEvent]]) {
+        for (sessionKey, events) in surfacesBySession {
+            for event in events.sorted(by: { lhs, rhs in
+                if lhs.revision != rhs.revision {
+                    return lhs.revision < rhs.revision
+                }
+                return lhs.timestamp < rhs.timestamp
+            }) {
+                ingest(event: .genUI(event), sessionKey: sessionKey)
+            }
+        }
+    }
+
     public func clear(sessionKey: String) {
         sessionEvents.removeValue(forKey: sessionKey)
         sessionDigests.removeValue(forKey: sessionKey)
@@ -160,13 +205,21 @@ public final class AgentEventStore {
                 )
             )
         case let (.genUI(old), .genUI(new)):
+            if new.revision < old.revision {
+                return .genUI(old)
+            }
             return .genUI(
                 GenUIEvent(
                     id: old.id,
                     schemaVersion: new.schemaVersion,
                     mode: new.mode,
-                    title: mergedText(current: old.title, incoming: new.title, preferIncoming: new.mode == .snapshot),
-                    body: mergedText(current: old.body, incoming: new.body, preferIncoming: new.mode == .snapshot),
+                    surfaceID: mergedText(current: old.surfaceID, incoming: new.surfaceID, preferIncoming: true),
+                    revision: max(old.revision, new.revision),
+                    correlationID: new.correlationID ?? old.correlationID,
+                    title: mergedText(current: old.title, incoming: new.title, preferIncoming: true),
+                    body: mergedText(current: old.body, incoming: new.body, preferIncoming: true),
+                    surfacePayload: mergeSurfacePayload(current: old.surfacePayload, incoming: new.surfacePayload, mode: new.mode),
+                    contextPayload: mergeContextPayload(current: old.contextPayload, incoming: new.contextPayload),
                     actionLabel: new.actionLabel ?? old.actionLabel,
                     actionPayload: mergeActionPayload(current: old.actionPayload, incoming: new.actionPayload),
                     timestamp: new.timestamp
@@ -187,6 +240,133 @@ public final class AgentEventStore {
             merged[key] = value
         }
         return merged
+    }
+
+    private func mergeSurfacePayload(
+        current: [String: AnyCodable],
+        incoming: [String: AnyCodable],
+        mode: GenUIEvent.UpdateMode
+    ) -> [String: AnyCodable] {
+        guard !incoming.isEmpty else { return current }
+        if mode == .snapshot {
+            return incoming
+        }
+        return mergeDictionaryPatch(current: current, incoming: incoming)
+    }
+
+    private func mergeContextPayload(
+        current: [String: AnyCodable],
+        incoming: [String: AnyCodable]
+    ) -> [String: AnyCodable] {
+        guard !incoming.isEmpty else { return current }
+        return mergeDictionaryPatch(current: current, incoming: incoming)
+    }
+
+    private func mergeDictionaryPatch(
+        current: [String: AnyCodable],
+        incoming: [String: AnyCodable]
+    ) -> [String: AnyCodable] {
+        var merged = current
+        for (key, incomingValue) in incoming {
+            guard let currentValue = merged[key] else {
+                merged[key] = incomingValue
+                continue
+            }
+
+            if let incomingDict = incomingValue.dictValue,
+               let currentDict = currentValue.dictValue {
+                merged[key] = AnyCodable(mergeDictionaryPatch(current: currentDict, incoming: incomingDict))
+                continue
+            }
+
+            if let incomingArray = incomingValue.arrayValue,
+               let currentArray = currentValue.arrayValue {
+                merged[key] = AnyCodable(mergeArrayPatch(key: key, current: currentArray, incoming: incomingArray))
+                continue
+            }
+
+            merged[key] = incomingValue
+        }
+        return merged
+    }
+
+    private func mergeArrayPatch(
+        key: String,
+        current: [AnyCodable],
+        incoming: [AnyCodable]
+    ) -> [AnyCodable] {
+        guard !incoming.isEmpty else { return current }
+
+        if key == "components" || key == "items" || key == "actions" || key == "buttons" {
+            return mergeArrayOfObjectsByIdentity(current: current, incoming: incoming)
+        }
+
+        if canMergeArrayByIdentity(current: current, incoming: incoming) {
+            return mergeArrayOfObjectsByIdentity(current: current, incoming: incoming)
+        }
+
+        return incoming
+    }
+
+    private func canMergeArrayByIdentity(current: [AnyCodable], incoming: [AnyCodable]) -> Bool {
+        guard !incoming.isEmpty else { return false }
+        let all = current + incoming
+        return all.allSatisfy { value in
+            guard let dict = value.dictValue else { return false }
+            return dictionaryIdentity(dict) != nil
+        }
+    }
+
+    private func mergeArrayOfObjectsByIdentity(
+        current: [AnyCodable],
+        incoming: [AnyCodable]
+    ) -> [AnyCodable] {
+        var result = current
+        var indexByIdentity: [String: Int] = [:]
+
+        for (index, value) in result.enumerated() {
+            guard let dict = value.dictValue,
+                  let identity = dictionaryIdentity(dict)
+            else { continue }
+            indexByIdentity[identity] = index
+        }
+
+        for incomingValue in incoming {
+            guard let incomingDict = incomingValue.dictValue,
+                  let identity = dictionaryIdentity(incomingDict)
+            else {
+                result.append(incomingValue)
+                continue
+            }
+
+            if let existingIndex = indexByIdentity[identity],
+               let existingDict = result[existingIndex].dictValue {
+                result[existingIndex] = AnyCodable(
+                    mergeDictionaryPatch(current: existingDict, incoming: incomingDict)
+                )
+            } else {
+                indexByIdentity[identity] = result.count
+                result.append(incomingValue)
+            }
+        }
+
+        return result
+    }
+
+    private func dictionaryIdentity(_ dict: [String: AnyCodable]) -> String? {
+        if let id = normalizedString(dict["id"]) { return "id:\(id)" }
+        if let id = normalizedString(dict["actionId"]) { return "action:\(id)" }
+        if let id = normalizedString(dict["action_id"]) { return "action:\(id)" }
+        if let id = normalizedString(dict["key"]) { return "key:\(id)" }
+        if let id = normalizedString(dict["name"]) { return "name:\(id)" }
+        if let id = normalizedString(dict["type"]) { return "type:\(id)" }
+        return nil
+    }
+
+    private func normalizedString(_ value: AnyCodable?) -> String? {
+        guard let trimmed = value?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     private func mergedText(current: String, incoming: String, preferIncoming: Bool) -> String {

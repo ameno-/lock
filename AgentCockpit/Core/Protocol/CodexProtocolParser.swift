@@ -17,6 +17,7 @@ public struct CodexThreadSummary: Sendable, Equatable {
     public let name: String?
     public let preview: String?
     public let statusType: String?
+    public let cwd: String?
     public let createdAt: Date?
     public let updatedAt: Date?
 
@@ -85,8 +86,38 @@ public enum CodexProtocolParser {
 
     public static func parseThread(from result: AnyCodable?) -> CodexThreadSummary? {
         let root = result?.dictValue ?? [:]
-        let thread = root["thread"]?.dictValue
-            ?? root["data"]?.dictValue?["thread"]?.dictValue
+        if let thread = root["thread"]?.dictValue {
+            return parseThreadSummary(from: thread)
+        }
+
+        if let threadID = firstNonEmpty(
+            root["threadId"]?.stringValue,
+            root["thread_id"]?.stringValue
+        ) {
+            return CodexThreadSummary(
+                id: threadID,
+                name: firstNonEmpty(root["name"]?.stringValue, root["title"]?.stringValue),
+                preview: firstNonEmpty(
+                    root["preview"]?.stringValue,
+                    root["summary"]?.stringValue,
+                    root["prompt"]?.stringValue
+                ),
+                statusType: firstNonEmpty(
+                    root["status"]?.dictValue?["type"]?.stringValue,
+                    root["status"]?.stringValue,
+                    root["state"]?.stringValue
+                ),
+                cwd: firstNonEmpty(
+                    root["cwd"]?.stringValue,
+                    root["workingDirectory"]?.stringValue,
+                    root["working_directory"]?.stringValue
+                ),
+                createdAt: parseDate(root["createdAt"] ?? root["created_at"]),
+                updatedAt: parseDate(root["updatedAt"] ?? root["updated_at"])
+            )
+        }
+
+        let thread = root["data"]?.dictValue?["thread"]?.dictValue
             ?? root["data"]?.dictValue
             ?? root
         return parseThreadSummary(from: thread)
@@ -235,6 +266,11 @@ public enum CodexProtocolParser {
                 row["status"]?.dictValue?["type"]?.stringValue,
                 row["status"]?.stringValue,
                 row["state"]?.stringValue
+            ),
+            cwd: firstNonEmpty(
+                row["cwd"]?.stringValue,
+                row["workingDirectory"]?.stringValue,
+                row["working_directory"]?.stringValue
             ),
             createdAt: parseDate(row["createdAt"] ?? row["created_at"]),
             updatedAt: parseDate(row["updatedAt"] ?? row["updated_at"])

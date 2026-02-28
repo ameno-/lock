@@ -24,6 +24,7 @@ public struct ACPUpdateContext: Sendable {
     public let toolCallID: String?
     public let toolInput: String
     public let toolResult: String
+    public let toolStatus: String?
     public let isError: Bool
 }
 
@@ -76,8 +77,12 @@ public enum ACPProtocolParser {
         }()
 
         let lowerKind = rawKind.replacingOccurrences(of: "-", with: "_").lowercased()
+        let toolStatus = normalizedStatus(from: update)
         let isError = lowerKind.contains("error")
-            || (update["status"]?.stringValue?.lowercased() == "error")
+            || toolStatus == "error"
+            || toolStatus == "failed"
+            || toolStatus == "cancelled"
+            || toolStatus == "canceled"
 
         return ACPUpdateContext(
             sessionID: sessionID,
@@ -109,6 +114,7 @@ public enum ACPProtocolParser {
             ),
             toolInput: toolInput,
             toolResult: toolResult,
+            toolStatus: toolStatus,
             isError: isError
         )
     }
@@ -132,13 +138,13 @@ public enum ACPProtocolParser {
         if normalized.contains("tool_call") {
             return .toolCall
         }
-        if normalized.contains("user_message") {
+        if normalized.contains("user_message_chunk") || normalized.contains("user_message") {
             return .userMessage
         }
-        if normalized.contains("agent_thought") {
+        if normalized.contains("agent_thought_chunk") || normalized.contains("agent_thought") {
             return .agentThought
         }
-        if normalized.contains("agent_message") {
+        if normalized.contains("agent_message_chunk") || normalized.contains("agent_message") {
             return .agentMessage
         }
 
@@ -271,5 +277,15 @@ public enum ACPProtocolParser {
             return nil
         }
         return value
+    }
+
+    private static func normalizedStatus(from update: [String: AnyCodable]) -> String? {
+        let status = firstNonEmpty(
+            update["status"]?.stringValue,
+            update["status"]?.dictValue?["type"]?.stringValue,
+            update["result"]?.dictValue?["status"]?.stringValue,
+            update["toolResult"]?.dictValue?["status"]?.stringValue
+        )
+        return status?.replacingOccurrences(of: "-", with: "_").lowercased()
     }
 }

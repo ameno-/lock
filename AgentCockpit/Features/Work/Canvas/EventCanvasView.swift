@@ -5,6 +5,7 @@ struct EventCanvasView: View {
     let events: [CanvasEvent]
     var onViewSubAgentInAIs: ((SubAgentEvent) -> Void)? = nil
     var onGenUIAction: ((GenUIEvent) -> Void)? = nil
+    var genUIActionState: ((String, String) -> GenUIActionDispatchState?)? = nil
 
     @State private var isAtBottom = true
     @State private var lastRenderedMarker = ""
@@ -20,6 +21,8 @@ struct EventCanvasView: View {
                             }
                         } onGenUIAction: { genui in
                             onGenUIAction?(genui)
+                        } genUIActionState: { surfaceID, actionID in
+                            genUIActionState?(surfaceID, actionID)
                         }
                         .padding(.horizontal, 12)
                         .id(event.id)

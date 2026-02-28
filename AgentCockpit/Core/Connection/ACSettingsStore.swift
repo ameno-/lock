@@ -1,6 +1,34 @@
 // ACSettingsStore.swift — UserDefaults-backed gateway host/port settings
 import Foundation
 
+public enum ACTranscriptDisplayMode: String, CaseIterable, Sendable {
+    case standard
+    case debug
+    case textOnly
+
+    public var displayName: String {
+        switch self {
+        case .standard:
+            return "Standard"
+        case .debug:
+            return "Debug"
+        case .textOnly:
+            return "Text Only"
+        }
+    }
+
+    public var settingsDescription: String {
+        switch self {
+        case .standard:
+            return "Balanced transcript view for regular conversation flow."
+        case .debug:
+            return "Show extra technical detail to help inspect session behavior."
+        case .textOnly:
+            return "Prioritize plain text output and minimize structured event cards."
+        }
+    }
+}
+
 @Observable
 @MainActor
 public final class ACSettingsStore {
@@ -15,6 +43,8 @@ public final class ACSettingsStore {
         static let cfAccessClientId = "agentcockpit.auth.cfAccessClientId"
         static let cfAccessClientSecret = "agentcockpit.auth.cfAccessClientSecret"
         static let genuiEnabled = "agentcockpit.feature.genuiEnabled"
+        static let implicitGenUIFromTextEnabled = "agentcockpit.feature.implicitGenUIFromTextEnabled"
+        static let transcriptDisplayMode = "agentcockpit.transcript.displayMode"
         static let snippetAgentSlug = "agentcockpit.snippets.agentSlug"
     }
 
@@ -91,6 +121,26 @@ public final class ACSettingsStore {
             return UserDefaults.standard.bool(forKey: Keys.genuiEnabled)
         }
         set { UserDefaults.standard.set(newValue, forKey: Keys.genuiEnabled) }
+    }
+
+    public var implicitGenUIFromTextEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Keys.implicitGenUIFromTextEnabled) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Keys.implicitGenUIFromTextEnabled)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.implicitGenUIFromTextEnabled) }
+    }
+
+    public var transcriptDisplayMode: ACTranscriptDisplayMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: Keys.transcriptDisplayMode),
+                  let parsed = ACTranscriptDisplayMode(rawValue: raw)
+            else { return .standard }
+            return parsed
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: Keys.transcriptDisplayMode) }
     }
 
     public var snippetAgentSlug: String {

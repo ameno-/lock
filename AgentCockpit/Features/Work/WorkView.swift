@@ -32,6 +32,9 @@ struct WorkView: View {
                         },
                         onGenUIAction: { event in
                             viewModel.performGenUIAction(event)
+                        },
+                        genUIActionState: { surfaceID, actionID in
+                            viewModel.genUIActionState(surfaceID: surfaceID, actionID: actionID)
                         }
                     )
                 }

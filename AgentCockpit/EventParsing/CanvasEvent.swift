@@ -221,8 +221,8 @@ public enum FileOperation: Sendable {
 
 // MARK: - GenUI
 
-public struct GenUIEvent: Sendable {
-    public enum UpdateMode: Sendable {
+public struct GenUIEvent: Sendable, Codable {
+    public enum UpdateMode: String, Sendable, Codable {
         case snapshot
         case patch
     }
@@ -230,8 +230,13 @@ public struct GenUIEvent: Sendable {
     public let id: String
     public let schemaVersion: String
     public let mode: UpdateMode
+    public let surfaceID: String
+    public let revision: Int
+    public let correlationID: String?
     public let title: String
     public let body: String
+    public let surfacePayload: [String: AnyCodable]
+    public let contextPayload: [String: AnyCodable]
     public let actionLabel: String?
     public let actionPayload: [String: AnyCodable]
     public let timestamp: Date
@@ -240,17 +245,31 @@ public struct GenUIEvent: Sendable {
         id: String = UUID().uuidString,
         schemaVersion: String = "v0",
         mode: UpdateMode = .snapshot,
+        surfaceID: String? = nil,
+        revision: Int = 0,
+        correlationID: String? = nil,
         title: String,
         body: String,
+        surfacePayload: [String: AnyCodable] = [:],
+        contextPayload: [String: AnyCodable] = [:],
         actionLabel: String? = nil,
         actionPayload: [String: AnyCodable] = [:],
         timestamp: Date = .now
     ) {
+        let normalizedSurfaceID = surfaceID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCorrelationID = correlationID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         self.id = id
         self.schemaVersion = schemaVersion
         self.mode = mode
+        self.surfaceID = (normalizedSurfaceID?.isEmpty == false) ? normalizedSurfaceID! : id
+        self.revision = max(0, revision)
+        self.correlationID = (normalizedCorrelationID?.isEmpty == false) ? normalizedCorrelationID : nil
         self.title = title
         self.body = body
+        self.surfacePayload = surfacePayload
+        self.contextPayload = contextPayload
         self.actionLabel = actionLabel
         self.actionPayload = actionPayload
         self.timestamp = timestamp

@@ -14,6 +14,8 @@ final class WorkViewModel {
     private var activateTask: Task<Void, Never>?
     private var lastActivatedSessionKey: String?
     private var loadedContextSessionKeys: Set<String> = []
+    private var recoveredPendingActionsSessionKeys: Set<String> = []
+    private var genUIActionStatesByKey: [String: GenUIActionDispatchState] = [:]
     private var snippetStack: [String] = []
     var inputText = ""
     var errorMessage: String? = nil
@@ -122,13 +124,50 @@ final class WorkViewModel {
             errorMessage = "No active session for GenUI action."
             return
         }
+        let actionID = event.actionPayload["actionId"]?.stringValue
+            ?? event.actionPayload["action_id"]?.stringValue
+            ?? event.actionLabel?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "_")
+            ?? "action"
+        let pendingID = appModel.enqueuePendingGenUIAction(sessionKey: key, event: event)
+        appModel.markPendingGenUIActionAttempt(id: pendingID)
+        setGenUIActionState(
+            sessionKey: key,
+            surfaceID: event.surfaceID,
+            actionID: actionID,
+            state: GenUIActionDispatchState(status: .sending)
+        )
         Task {
             do {
                 try await appModel.transport.submitGenUIAction(sessionKey: key, event: event)
+                appModel.markPendingGenUIActionCompleted(id: pendingID)
+                setGenUIActionState(
+                    sessionKey: key,
+                    surfaceID: event.surfaceID,
+                    actionID: actionID,
+                    state: GenUIActionDispatchState(status: .succeeded)
+                )
             } catch {
+                appModel.markPendingGenUIActionFailed(id: pendingID, errorMessage: error.localizedDescription)
+                setGenUIActionState(
+                    sessionKey: key,
+                    surfaceID: event.surfaceID,
+                    actionID: actionID,
+                    state: GenUIActionDispatchState(
+                        status: .failed,
+                        message: error.localizedDescription
+                    )
+                )
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    func genUIActionState(surfaceID: String, actionID: String) -> GenUIActionDispatchState? {
+        guard let key = activeSessionKey else { return nil }
+        return genUIActionStatesByKey[genUIActionStateKey(sessionKey: key, surfaceID: surfaceID, actionID: actionID)]
     }
 
     func decideApproval(requestID: String, decision: ACApprovalDecision) {
@@ -156,6 +195,7 @@ final class WorkViewModel {
         activateTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
+                self.clearGenUIActionStates(for: key)
                 try await self.appModel.transport.subscribe(sessionKey: key)
 
                 // Backfill thread history once per session selection lifecycle.
@@ -164,8 +204,11 @@ final class WorkViewModel {
                     for event in history {
                         self.appModel.eventStore.ingest(event: event, sessionKey: key)
                     }
+                    self.appModel.persistGenUIStateNow()
                     self.loadedContextSessionKeys.insert(key)
                 }
+
+                await self.recoverPendingGenUIActionsIfNeeded(for: key)
             } catch {
                 // Allow retry for the same session if activation failed.
                 self.lastActivatedSessionKey = nil
@@ -301,5 +344,67 @@ final class WorkViewModel {
             return existing + "\n" + snippet
         }
         return existing + "\n\n" + snippet
+    }
+
+    private func setGenUIActionState(
+        sessionKey: String,
+        surfaceID: String,
+        actionID: String,
+        state: GenUIActionDispatchState
+    ) {
+        genUIActionStatesByKey[genUIActionStateKey(sessionKey: sessionKey, surfaceID: surfaceID, actionID: actionID)] = state
+    }
+
+    private func genUIActionStateKey(sessionKey: String, surfaceID: String, actionID: String) -> String {
+        "\(sessionKey)|\(surfaceID)|\(actionID)"
+    }
+
+    private func clearGenUIActionStates(for sessionKey: String) {
+        let prefix = "\(sessionKey)|"
+        genUIActionStatesByKey = genUIActionStatesByKey.filter { !$0.key.hasPrefix(prefix) }
+    }
+
+    private func recoverPendingGenUIActionsIfNeeded(for sessionKey: String) async {
+        guard !recoveredPendingActionsSessionKeys.contains(sessionKey) else { return }
+        recoveredPendingActionsSessionKeys.insert(sessionKey)
+
+        let pending = appModel.pendingGenUIActions(for: sessionKey)
+        guard !pending.isEmpty else { return }
+
+        for item in pending {
+            let actionID = item.event.actionPayload["actionId"]?.stringValue
+                ?? item.event.actionPayload["action_id"]?.stringValue
+                ?? item.event.actionLabel?
+                    .lowercased()
+                    .replacingOccurrences(of: " ", with: "_")
+                ?? "action"
+
+            appModel.markPendingGenUIActionAttempt(id: item.id)
+            setGenUIActionState(
+                sessionKey: sessionKey,
+                surfaceID: item.event.surfaceID,
+                actionID: actionID,
+                state: GenUIActionDispatchState(status: .sending)
+            )
+
+            do {
+                try await appModel.transport.submitGenUIAction(sessionKey: sessionKey, event: item.event)
+                appModel.markPendingGenUIActionCompleted(id: item.id)
+                setGenUIActionState(
+                    sessionKey: sessionKey,
+                    surfaceID: item.event.surfaceID,
+                    actionID: actionID,
+                    state: GenUIActionDispatchState(status: .succeeded)
+                )
+            } catch {
+                appModel.markPendingGenUIActionFailed(id: item.id, errorMessage: error.localizedDescription)
+                setGenUIActionState(
+                    sessionKey: sessionKey,
+                    surfaceID: item.event.surfaceID,
+                    actionID: actionID,
+                    state: GenUIActionDispatchState(status: .failed, message: error.localizedDescription)
+                )
+            }
+        }
     }
 }

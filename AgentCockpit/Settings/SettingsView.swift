@@ -120,10 +120,51 @@ struct SettingsView: View {
             }
 
             Section("Features") {
+                Picker("Transcript Display", selection: $settings.transcriptDisplayMode) {
+                    ForEach(ACTranscriptDisplayMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                Text(settings.transcriptDisplayMode.settingsDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Enable GenUI", isOn: $settings.genuiEnabled)
                 Text("When disabled, GenUI payloads stay visible as raw text events.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle("Auto-synthesize GenUI from assistant text", isOn: $settings.implicitGenUIFromTextEnabled)
+                Text("When enabled, checklist/progress assistant text can render as GenUI cards when no embedded GenUI block is present.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("Diagnostics")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+
+                LabeledContent("GenUI callback") {
+                    Text(appModel.activeGenUIActionCallbackDiagnostic.value)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(
+                            appModel.activeGenUIActionCallbackDiagnostic == .notAdvertised
+                                ? .secondary
+                                : .primary
+                        )
+                }
+                LabeledContent("GenUI parsed") {
+                    Text("\(appModel.genUIParseTelemetry.parsed)")
+                        .monospacedDigit()
+                }
+                LabeledContent("GenUI ignored") {
+                    Text("\(appModel.genUIParseTelemetry.parseIgnored)")
+                        .monospacedDigit()
+                }
+                LabeledContent("GenUI embedded") {
+                    Text("\(appModel.genUIParseTelemetry.embeddedParsed)")
+                        .monospacedDigit()
+                }
             }
 
             Section("Connection Status") {
