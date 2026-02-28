@@ -28,6 +28,7 @@ struct WorkView: View {
                     WorkTranscriptView(
                         events: viewModel.canvasEvents,
                         displayMode: appModel.settings.transcriptDisplayMode,
+                        activityGenUIEnabled: appModel.settings.activityGenUIEnabled,
                         onViewSubAgentInAIs: { _ in
                             appModel.selectedTab = .sessions
                         },

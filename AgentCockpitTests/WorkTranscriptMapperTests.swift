@@ -235,6 +235,143 @@ final class WorkTranscriptMapperTests: XCTestCase {
         XCTAssertEqual(second.text, "Fallback Title\n\nFallback Body")
     }
 
+    func testActivityGenUIStandardMapsToolUseIntoGenUICard() {
+        let events: [CanvasEvent] = [
+            .toolUse(
+                ToolUseEvent(
+                    id: "tool-1",
+                    toolName: "bash",
+                    phase: .result,
+                    input: "ls -la",
+                    result: "README.md",
+                    status: .done
+                )
+            )
+        ]
+
+        let entries = WorkTranscriptMapper.entries(
+            from: events,
+            policy: .standard,
+            activityGenUIEnabled: true
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        guard case .event(let mappedEvent) = entries[0],
+              case .genUI(let genUI) = mappedEvent else {
+            return XCTFail("Expected synthesized GenUI event")
+        }
+
+        XCTAssertEqual(genUI.contextPayload["__synthetic"]?.boolValue, true)
+        XCTAssertEqual(genUI.contextPayload["__activitySource"]?.stringValue, "tool_use")
+        XCTAssertEqual(genUI.title, "Tool: bash")
+        XCTAssertEqual(genUI.surfacePayload["components"]?.arrayValue?.count, 6)
+    }
+
+    func testActivityGenUIStandardMapsThinkingIntoGenUICard() {
+        let events: [CanvasEvent] = [
+            .reasoning(
+                ReasoningEvent(
+                    id: "think-1",
+                    text: "Evaluating file layout and command output.",
+                    isThinking: true
+                )
+            )
+        ]
+
+        let entries = WorkTranscriptMapper.entries(
+            from: events,
+            policy: .standard,
+            activityGenUIEnabled: true
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        guard case .event(let mappedEvent) = entries[0],
+              case .genUI(let genUI) = mappedEvent else {
+            return XCTFail("Expected synthesized GenUI thinking card")
+        }
+        XCTAssertEqual(genUI.title, "Thinking")
+        XCTAssertEqual(genUI.contextPayload["__activitySource"]?.stringValue, "thinking")
+    }
+
+    func testActivityGenUIDebugKeepsUnderlyingMessageAlongsideCard() {
+        let events: [CanvasEvent] = [
+            .reasoning(
+                ReasoningEvent(
+                    id: "reply-1",
+                    text: "Done. Build is green.",
+                    isThinking: false
+                )
+            )
+        ]
+
+        let entries = WorkTranscriptMapper.entries(
+            from: events,
+            policy: .debug,
+            activityGenUIEnabled: true
+        )
+
+        XCTAssertEqual(entries.count, 2)
+        guard case .event(let mappedEvent) = entries[0],
+              case .genUI = mappedEvent else {
+            return XCTFail("Expected synthesized GenUI event first")
+        }
+        guard case .message(let message) = entries[1] else {
+            return XCTFail("Expected original message row in debug mode")
+        }
+        XCTAssertEqual(message.role, .assistant)
+        XCTAssertEqual(message.text, "Done. Build is green.")
+    }
+
+    func testActivityGenUITextOnlySkipsSynthesis() {
+        let events: [CanvasEvent] = [
+            .reasoning(
+                ReasoningEvent(
+                    id: "reply-2",
+                    text: "Done. Build is green.",
+                    isThinking: false
+                )
+            )
+        ]
+
+        let entries = WorkTranscriptMapper.entries(
+            from: events,
+            policy: .textOnly,
+            activityGenUIEnabled: true
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        guard case .message(let message) = entries[0] else {
+            return XCTFail("Expected plain message row in text-only mode")
+        }
+        XCTAssertEqual(message.role, .assistant)
+    }
+
+    func testActivityGenUIStandardMapsUserAcknowledgementIntoGenUICard() {
+        let events: [CanvasEvent] = [
+            .rawOutput(
+                RawOutputEvent(
+                    id: "user-ack-1",
+                    text: "You: summarize latest failures",
+                    hookEvent: "session/update"
+                )
+            )
+        ]
+
+        let entries = WorkTranscriptMapper.entries(
+            from: events,
+            policy: .standard,
+            activityGenUIEnabled: true
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        guard case .event(let mappedEvent) = entries[0],
+              case .genUI(let genUI) = mappedEvent else {
+            return XCTFail("Expected synthesized user acknowledgement GenUI event")
+        }
+        XCTAssertEqual(genUI.title, "Message Acknowledged")
+        XCTAssertEqual(genUI.contextPayload["__activitySource"]?.stringValue, "user_ack")
+    }
+
     private func makeGenUIEvent(
         id: String,
         title: String,

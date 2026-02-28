@@ -57,12 +57,13 @@ enum WorkTranscriptDisplayPolicy: String, Sendable {
 
 enum WorkTranscriptMapper {
     static func entries(from events: [CanvasEvent]) -> [WorkTranscriptEntry] {
-        entries(from: events, policy: .standard)
+        entries(from: events, policy: .standard, activityGenUIEnabled: false)
     }
 
     static func entries(
         from events: [CanvasEvent],
-        policy: WorkTranscriptDisplayPolicy
+        policy: WorkTranscriptDisplayPolicy,
+        activityGenUIEnabled: Bool = false
     ) -> [WorkTranscriptEntry] {
         guard !events.isEmpty else { return [] }
 
@@ -77,6 +78,15 @@ enum WorkTranscriptMapper {
             if case .genUI(let genUI) = event {
                 appendGenUI(event: genUI, policy: policy, to: &mapped)
                 continue
+            }
+
+            if activityGenUIEnabled,
+               policy != .textOnly,
+               let synthesized = synthesizedActivityGenUI(from: event) {
+                mapped.append(.event(.genUI(synthesized)))
+                if policy == .standard {
+                    continue
+                }
             }
 
             guard let message = messagePayload(from: event) else {
@@ -226,6 +236,244 @@ enum WorkTranscriptMapper {
         }
     }
 
+    private static func synthesizedActivityGenUI(from event: CanvasEvent) -> GenUIEvent? {
+        switch event {
+        case .toolUse(let tool):
+            return synthesizedToolActivityGenUI(tool)
+
+        case .reasoning(let reasoning):
+            return synthesizedReasoningActivityGenUI(reasoning)
+
+        case .rawOutput(let raw):
+            guard let text = normalizedMessageText(raw.text),
+                  let userText = extractUserMessage(from: text)
+            else {
+                return nil
+            }
+            return synthesizedUserAcknowledgementGenUI(rawID: raw.id, message: userText, timestamp: raw.timestamp)
+
+        default:
+            return nil
+        }
+    }
+
+    private static func synthesizedToolActivityGenUI(_ event: ToolUseEvent) -> GenUIEvent {
+        let statusText: String
+        let statusProgress: Double
+        switch event.status {
+        case .running:
+            statusText = "Running"
+            statusProgress = 0.5
+        case .done:
+            statusText = "Completed"
+            statusProgress = 1.0
+        case .error:
+            statusText = "Failed"
+            statusProgress = 1.0
+        }
+
+        let normalizedInput = normalizedMessageText(event.input) ?? ""
+        let normalizedResult = normalizedMessageText(event.result ?? "") ?? ""
+        let hasResult = !normalizedResult.isEmpty
+        let hasTerminalStatus: Bool = switch event.status {
+        case .running: false
+        case .done, .error: true
+        }
+        let isSuccessful: Bool = switch event.status {
+        case .done: true
+        case .running, .error: false
+        }
+        let body = truncated(
+            firstNonEmpty(
+                normalizedResult,
+                normalizedInput,
+                "Tool \(event.toolName) is \(statusText.lowercased())."
+            ) ?? "Tool activity",
+            maxLength: 4_000
+        )
+
+        var components: [AnyCodable] = [
+            metricComponent(id: "tool", label: "Tool", value: event.toolName),
+            metricComponent(id: "status", label: "Status", value: statusText),
+            progressComponent(
+                id: "progress",
+                label: statusText == "Running" ? "Execution" : "Completion",
+                value: statusProgress
+            ),
+            checklistComponent(
+                id: "milestones",
+                title: "Execution",
+                items: [
+                    (id: "tool-dispatched", label: "Tool dispatched", done: true),
+                    (id: "tool-result", label: "Result received", done: hasResult || hasTerminalStatus),
+                    (id: "tool-success", label: "Completed successfully", done: isSuccessful)
+                ]
+            )
+        ]
+
+        if !normalizedInput.isEmpty {
+            components.append(
+                textComponent(
+                    id: "input",
+                    text: "Input:\n\(truncated(normalizedInput, maxLength: 800))"
+                )
+            )
+        }
+
+        if !normalizedResult.isEmpty {
+            components.append(
+                textComponent(
+                    id: "output",
+                    text: "Output:\n\(truncated(normalizedResult, maxLength: 1_600))"
+                )
+            )
+        }
+
+        return synthesizedActivityGenUIEvent(
+            sourceEventID: event.id,
+            sourceKind: "tool_use",
+            title: "Tool: \(event.toolName)",
+            body: body,
+            components: components,
+            timestamp: event.timestamp
+        )
+    }
+
+    private static func synthesizedReasoningActivityGenUI(_ event: ReasoningEvent) -> GenUIEvent? {
+        guard let text = normalizedMessageText(event.text) else { return nil }
+
+        if event.isThinking {
+            return synthesizedActivityGenUIEvent(
+                sourceEventID: event.id,
+                sourceKind: "thinking",
+                title: "Thinking",
+                body: truncated(text, maxLength: 4_000),
+                components: [
+                    metricComponent(id: "state", label: "State", value: "Reasoning"),
+                    progressComponent(id: "progress", label: "Cognition", value: 0.35),
+                    textComponent(id: "details", text: truncated(text, maxLength: 1_200))
+                ],
+                timestamp: event.timestamp
+            )
+        }
+
+        return synthesizedActivityGenUIEvent(
+            sourceEventID: event.id,
+            sourceKind: "agent_turn",
+            title: "Agent Turn",
+            body: truncated(text, maxLength: 4_000),
+            components: [
+                metricComponent(id: "state", label: "State", value: "Responding"),
+                progressComponent(id: "progress", label: "Turn", value: 1.0),
+                textComponent(id: "details", text: truncated(text, maxLength: 1_200))
+            ],
+            timestamp: event.timestamp
+        )
+    }
+
+    private static func synthesizedUserAcknowledgementGenUI(
+        rawID: String,
+        message: String,
+        timestamp: Date
+    ) -> GenUIEvent {
+        synthesizedActivityGenUIEvent(
+            sourceEventID: rawID,
+            sourceKind: "user_ack",
+            title: "Message Acknowledged",
+            body: truncated(message, maxLength: 4_000),
+            components: [
+                metricComponent(id: "state", label: "State", value: "Queued"),
+                progressComponent(id: "progress", label: "Dispatch", value: 1.0),
+                checklistComponent(
+                    id: "milestones",
+                    title: "Delivery",
+                    items: [(id: "queued", label: "Queued for assistant", done: true)]
+                ),
+                textComponent(id: "message", text: truncated(message, maxLength: 1_200))
+            ],
+            timestamp: timestamp
+        )
+    }
+
+    private static func synthesizedActivityGenUIEvent(
+        sourceEventID: String,
+        sourceKind: String,
+        title: String,
+        body: String,
+        components: [AnyCodable],
+        timestamp: Date
+    ) -> GenUIEvent {
+        let revision = max(0, Int((timestamp.timeIntervalSince1970 * 1000).rounded()))
+        let syntheticID = "activity/\(sourceKind)/\(sourceEventID)"
+        return GenUIEvent(
+            id: syntheticID,
+            schemaVersion: "v0",
+            mode: .snapshot,
+            surfaceID: syntheticID,
+            revision: revision,
+            correlationID: "activity-\(sourceKind)",
+            title: title,
+            body: body,
+            surfacePayload: ["components": AnyCodable(components)],
+            contextPayload: [
+                "__synthetic": AnyCodable(true),
+                "__activitySource": AnyCodable(sourceKind),
+                "sourceEventId": AnyCodable(sourceEventID),
+            ],
+            actionLabel: nil,
+            actionPayload: [:],
+            timestamp: timestamp
+        )
+    }
+
+    private static func textComponent(id: String, text: String) -> AnyCodable {
+        AnyCodable([
+            "id": AnyCodable(id),
+            "type": AnyCodable("text"),
+            "text": AnyCodable(text),
+        ])
+    }
+
+    private static func metricComponent(id: String, label: String, value: String) -> AnyCodable {
+        AnyCodable([
+            "id": AnyCodable(id),
+            "type": AnyCodable("metric"),
+            "label": AnyCodable(label),
+            "value": AnyCodable(value),
+        ])
+    }
+
+    private static func progressComponent(id: String, label: String, value: Double) -> AnyCodable {
+        let clamped = min(1, max(0, value))
+        return AnyCodable([
+            "id": AnyCodable(id),
+            "type": AnyCodable("progress"),
+            "label": AnyCodable(label),
+            "value": AnyCodable(clamped),
+        ])
+    }
+
+    private static func checklistComponent(
+        id: String,
+        title: String,
+        items: [(id: String, label: String, done: Bool)]
+    ) -> AnyCodable {
+        AnyCodable([
+            "id": AnyCodable(id),
+            "type": AnyCodable("checklist"),
+            "title": AnyCodable(title),
+            "items": AnyCodable(
+                items.map { item in
+                    AnyCodable([
+                        "id": AnyCodable(item.id),
+                        "label": AnyCodable(item.label),
+                        "done": AnyCodable(item.done),
+                    ])
+                }
+            ),
+        ])
+    }
+
     private static func appendMessage(
         _ message: WorkTranscriptMessageEntry,
         to mapped: inout [WorkTranscriptEntry]
@@ -276,6 +524,20 @@ enum WorkTranscriptMapper {
             }
         }
         return nil
+    }
+
+    private static func firstNonEmpty(_ candidates: String?...) -> String? {
+        for candidate in candidates {
+            guard let normalized = normalizedMessageText(candidate ?? "") else { continue }
+            return normalized
+        }
+        return nil
+    }
+
+    private static func truncated(_ text: String, maxLength: Int) -> String {
+        guard text.count > maxLength else { return text }
+        let end = text.index(text.startIndex, offsetBy: maxLength)
+        return String(text[..<end]) + "..."
     }
 
     private static func normalizedMessageText(_ raw: String) -> String? {

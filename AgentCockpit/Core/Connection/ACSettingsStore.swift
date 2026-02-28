@@ -44,6 +44,7 @@ public final class ACSettingsStore {
         static let cfAccessClientSecret = "agentcockpit.auth.cfAccessClientSecret"
         static let genuiEnabled = "agentcockpit.feature.genuiEnabled"
         static let implicitGenUIFromTextEnabled = "agentcockpit.feature.implicitGenUIFromTextEnabled"
+        static let activityGenUIEnabled = "agentcockpit.feature.activityGenUIEnabled"
         static let transcriptDisplayMode = "agentcockpit.transcript.displayMode"
         static let snippetAgentSlug = "agentcockpit.snippets.agentSlug"
     }
@@ -131,6 +132,16 @@ public final class ACSettingsStore {
             return UserDefaults.standard.bool(forKey: Keys.implicitGenUIFromTextEnabled)
         }
         set { UserDefaults.standard.set(newValue, forKey: Keys.implicitGenUIFromTextEnabled) }
+    }
+
+    public var activityGenUIEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Keys.activityGenUIEnabled) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Keys.activityGenUIEnabled)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.activityGenUIEnabled) }
     }
 
     public var transcriptDisplayMode: ACTranscriptDisplayMode {

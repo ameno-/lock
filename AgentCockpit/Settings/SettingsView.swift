@@ -139,6 +139,11 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Toggle("Map activity events to GenUI", isOn: $settings.activityGenUIEnabled)
+                Text("When enabled, tool calls, thinking, and user acknowledgements render as synthesized GenUI cards.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Text("Diagnostics")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
