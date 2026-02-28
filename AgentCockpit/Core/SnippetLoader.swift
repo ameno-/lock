@@ -26,10 +26,11 @@ final class SnippetLoader {
     private let fileManager: FileManager
     private let snippetsRootURL: URL
     private let bundledCategories: [SnippetCategory]?
-    private var cache: [SnippetContext: [SnippetCategory]] = [:]
 
     // Kept for existing callers that use the non-context API.
-    private(set) var categories: [SnippetCategory] = []
+    var categories: [SnippetCategory] {
+        resolveCategories(for: .empty)
+    }
 
     init(
         fileManager: FileManager = .default,
@@ -39,9 +40,6 @@ final class SnippetLoader {
         self.fileManager = fileManager
         self.snippetsRootURL = snippetsRootURL ?? SnippetLoader.defaultSnippetsRoot(fileManager: fileManager)
         self.bundledCategories = SnippetLoader.loadBundledCategories(bundle: bundle)
-
-        let initial = resolveCategories(for: .empty)
-        self.categories = initial
     }
 
     func categories(for context: SnippetContext) -> [SnippetCategory] {
@@ -49,10 +47,6 @@ final class SnippetLoader {
     }
 
     private func resolveCategories(for context: SnippetContext) -> [SnippetCategory] {
-        if let cached = cache[context] {
-            return cached
-        }
-
         var layers: [[SnippetCategory]] = [defaultCategories]
         if let bundledCategories {
             layers.append(bundledCategories)
@@ -64,9 +58,7 @@ final class SnippetLoader {
             }
         }
 
-        let resolved = SnippetLoader.mergeLayers(layers)
-        cache[context] = resolved
-        return resolved
+        return SnippetLoader.mergeLayers(layers)
     }
 
     private func filesystemLayerURLs(for context: SnippetContext) -> [URL] {
