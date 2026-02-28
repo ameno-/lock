@@ -187,6 +187,17 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Labs") {
+                NavigationLink {
+                    ChatUIDemoView()
+                } label: {
+                    Label("Chat UI Demo", systemImage: "message.badge.waveform")
+                }
+                Text("Prototype surface for evaluating conversation layout, motion, and visual style.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("About") {
                 LabeledContent("Version", value: "1.0.0")
                 LabeledContent("Endpoint Mode", value: settings.serverProtocol.displayName)
