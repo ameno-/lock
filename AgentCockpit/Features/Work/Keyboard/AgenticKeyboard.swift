@@ -34,6 +34,10 @@ struct InlineAgenticKeyboard: View {
     @Binding var text: String
     var onSend: (String) -> Void
     var onAbort: () -> Void
+    var onSnippetInsert: (String) -> Void
+    var onExecuteStack: () -> Void
+    var onClearStack: () -> Void
+    var snippetStackCount: Int
     var snippetCategories: [SnippetCategory]
 
     @State private var isSnippetMode = false
@@ -45,7 +49,7 @@ struct InlineAgenticKeyboard: View {
                 KeyboardSnippetMode(
                     selectedCategory: $selectedCategory,
                     onInsert: { snippet in
-                        text = appendSnippet(snippet, to: text)
+                        onSnippetInsert(snippet)
                     },
                     onDismiss: {
                         withAnimation(.spring(duration: 0.25)) { isSnippetMode = false }
@@ -58,6 +62,9 @@ struct InlineAgenticKeyboard: View {
                     text: $text,
                     onSend: onSend,
                     onAbort: onAbort,
+                    snippetStackCount: snippetStackCount,
+                    onExecuteStack: onExecuteStack,
+                    onClearStack: onClearStack,
                     onSnippetToggle: {
                         withAnimation(.spring(duration: 0.25)) { isSnippetMode = true }
                     }
@@ -66,18 +73,5 @@ struct InlineAgenticKeyboard: View {
             }
         }
         .animation(.spring(duration: 0.25), value: isSnippetMode)
-    }
-
-    private func appendSnippet(_ snippet: String, to existing: String) -> String {
-        guard !snippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return existing }
-        guard !existing.isEmpty else { return snippet }
-
-        if existing.hasSuffix("\n\n") {
-            return existing + snippet
-        }
-        if existing.hasSuffix("\n") {
-            return existing + "\n" + snippet
-        }
-        return existing + "\n\n" + snippet
     }
 }

@@ -4,6 +4,15 @@ import SwiftUI
 @Observable
 @MainActor
 public final class AppModel {
+    struct SessionMetadataSnapshot: Sendable, Equatable {
+        let sessionKey: String
+        let name: String?
+        let preview: String?
+        let cwd: String?
+        let statusText: String?
+        let metadataText: String
+    }
+
     // MARK: - Sub-models
     public let settings = ACSettingsStore()
     public let connection: ACGatewayConnection
@@ -13,6 +22,7 @@ public final class AppModel {
     // MARK: - Navigation state
     public var promotedSessionKey: String? = nil
     public var selectedTab: AppTab = .work
+    private var sessionMetadataByKey: [String: SessionMetadataSnapshot] = [:]
 
     // MARK: - Pending interaction requests
 
@@ -189,6 +199,44 @@ public final class AppModel {
     }
 
     // MARK: - Session promotion
+
+    func cacheSessionMetadata(for session: ACSessionEntry) {
+        let name = normalizedMetadataField(session.name)
+        let preview = normalizedMetadataField(session.preview)
+        let cwd = normalizedMetadataField(session.cwd)
+        let status = normalizedMetadataField(session.statusText)
+        let metadataText = [session.key, name, preview, cwd, status]
+            .compactMap { value in
+                normalizedMetadataField(value)
+            }
+            .joined(separator: "\n")
+
+        sessionMetadataByKey[session.key] = SessionMetadataSnapshot(
+            sessionKey: session.key,
+            name: name,
+            preview: preview,
+            cwd: cwd,
+            statusText: status,
+            metadataText: metadataText
+        )
+    }
+
+    func cacheSessionMetadata(for sessions: [ACSessionEntry]) {
+        for session in sessions {
+            cacheSessionMetadata(for: session)
+        }
+    }
+
+    func sessionMetadata(for sessionKey: String?) -> SessionMetadataSnapshot? {
+        guard let sessionKey else { return nil }
+        return sessionMetadataByKey[sessionKey]
+    }
+
+    private func normalizedMetadataField(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
 
     public func promoteSession(_ key: String) {
         promotedSessionKey = key

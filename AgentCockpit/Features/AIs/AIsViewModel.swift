@@ -110,6 +110,7 @@ final class AIsViewModel {
         do {
             let result = try await appModel.transport.listSessions()
             sessions = result
+            appModel.cacheSessionMetadata(for: result)
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -122,6 +123,7 @@ final class AIsViewModel {
                 error = "Session creation is only supported for ACP and Codex endpoints."
                 return
             }
+            appModel.cacheSessionMetadata(for: created)
             appModel.promoteSession(created.key)
             await refresh()
         } catch {
@@ -130,6 +132,7 @@ final class AIsViewModel {
     }
 
     func promote(session: ACSessionEntry) {
+        appModel.cacheSessionMetadata(for: session)
         appModel.promoteSession(session.key)
     }
 

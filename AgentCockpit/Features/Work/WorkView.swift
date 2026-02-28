@@ -46,8 +46,12 @@ struct WorkView: View {
                 Divider().opacity(0.3)
                 InlineAgenticKeyboard(
                     text: $viewModel.inputText,
-                    onSend: { text in viewModel.send(text: text) },
+                    onSend: { text in _ = viewModel.send(text: text) },
                     onAbort: { viewModel.abort() },
+                    onSnippetInsert: { snippet in viewModel.queueSnippetForInsert(snippet) },
+                    onExecuteStack: { _ = viewModel.executeSnippetStack() },
+                    onClearStack: { viewModel.clearSnippetStack() },
+                    snippetStackCount: viewModel.snippetStackCount,
                     snippetCategories: viewModel.snippetCategories
                 )
             }

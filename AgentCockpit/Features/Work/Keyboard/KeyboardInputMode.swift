@@ -5,6 +5,9 @@ struct KeyboardInputMode: View {
     @Binding var text: String
     var onSend: (String) -> Void
     var onAbort: () -> Void
+    var snippetStackCount: Int
+    var onExecuteStack: () -> Void
+    var onClearStack: () -> Void
     var onSnippetToggle: () -> Void
 
     var body: some View {
@@ -24,11 +27,41 @@ struct KeyboardInputMode: View {
                 Button {
                     onSnippetToggle()
                 } label: {
-                    Label("Snippets", systemImage: "bolt.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.yellow)
+                    HStack(spacing: 6) {
+                        Label("Snippets", systemImage: "bolt.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.yellow)
+                        if snippetStackCount > 0 {
+                            Text("\(snippetStackCount)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
+
+                if snippetStackCount > 0 {
+                    Button {
+                        onExecuteStack()
+                    } label: {
+                        Label("Execute Stack", systemImage: "play.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.green)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onClearStack()
+                    } label: {
+                        Label("Clear Stack", systemImage: "xmark.circle")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 Spacer()
 
