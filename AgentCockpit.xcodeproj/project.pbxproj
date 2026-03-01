@@ -48,6 +48,7 @@
 		8ECE0A50A5FC3D6DF3DE5DC3 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29F171175AEDD32446DD4401 /* AppModel.swift */; };
 		927AC7FF7CA48340BFD328CC /* GenUIRenderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF4C03FE337107551B9412A /* GenUIRenderModel.swift */; };
 		980315217229C31E77474A5D /* ACGatewayConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9B4B38E7FE6821C91B3FBF /* ACGatewayConnection.swift */; };
+		9D376F7E2B1F565E0D59EE86 /* RetroChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 571841A40D09279041A7612C /* RetroChatView.swift */; };
 		9E3553C5AA82DDF773BE0038 /* GenUIComponentRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E4E893C34402C3483541BC1 /* GenUIComponentRenderer.swift */; };
 		A09DDE7738ACC3B05360F0EA /* ACSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E76AD73E38D903F8F213754 /* ACSettingsStore.swift */; };
 		A0CE53B73F14804F0623DFD8 /* AgentCockpitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE955B78EF13C007C106CDD /* AgentCockpitApp.swift */; };
@@ -117,6 +118,7 @@
 		511FA187BEB259DFDB587470 /* CodexProtocolParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProtocolParser.swift; sourceTree = "<group>"; };
 		548AB42D4D2EFB37E326BCAE /* GenUIComponentShowcase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GenUIComponentShowcase.swift; path = GenUIComponentShowcase.swift; sourceTree = "<group>"; };
 		571514BF9E01880CFF3E691B /* QuickReplyStrip.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickReplyStrip.swift; sourceTree = "<group>"; };
+		571841A40D09279041A7612C /* RetroChatView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RetroChatView.swift; sourceTree = "<group>"; };
 		571B2416E216EACD84289370 /* EventCardRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCardRouter.swift; sourceTree = "<group>"; };
 		59570ED00CD2D608BA8EB2F4 /* AgentCockpitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AgentCockpitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5B845FE5C1469E72E717E5D0 /* AIsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIsViewModel.swift; sourceTree = "<group>"; };
@@ -423,6 +425,7 @@
 				C4ABE083F2D74F8A9DE4327C /* GenUIDemoView.swift */,
 				B53DE0298107D98C599136B2 /* Rendering */,
 				548AB42D4D2EFB37E326BCAE /* GenUIComponentShowcase.swift */,
+				571841A40D09279041A7612C /* RetroChatView.swift */,
 			);
 			path = GenUI;
 			sourceTree = "<group>";
@@ -609,6 +612,7 @@
 				55624D9D642543AE10FD7450 /* ApprovalSurfaceSynthesizer.swift in Sources */,
 				338EB803F25DC81F8D14924E /* SessionReorientationSynthesizer.swift in Sources */,
 				21420F8AF35A6DBB527D1156 /* SurfaceDockView.swift in Sources */,
+				9D376F7E2B1F565E0D59EE86 /* RetroChatView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

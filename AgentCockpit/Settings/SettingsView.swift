@@ -184,6 +184,15 @@ struct SettingsView: View {
                 Text("Visual showcase of all GenUI component types: timeline, decision, risk gate, diff, code, key-value.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                NavigationLink {
+                    RetroChatView()
+                } label: {
+                    Label("Retro Chat UI", systemImage: "bubble.left.and.bubble.right")
+                }
+                Text("Playful retro-styled chat interface with animated avatar and GenUI integration ready.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("About") {
