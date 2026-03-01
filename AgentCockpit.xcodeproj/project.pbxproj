@@ -74,6 +74,7 @@
 		F2FF9D66C2458C6193FD5D5A /* GenUIActionDispatchState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECF2F24569BAC37960C6352 /* GenUIActionDispatchState.swift */; };
 		F9C91B3067EC0809FAFF7757 /* AssistantTextParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ED95A1173253717E5F5B27 /* AssistantTextParser.swift */; };
 		FDD5E95428F54AE234EAEBB9 /* CodexProtocolParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF7D0356F2ADB52F07FAF08 /* CodexProtocolParserTests.swift */; };
+		7B738623644EAC45DEC63B87A7AAE2B4 /* SlashCommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0737BE704B4ABC77D3910FA1610BA1 /* SlashCommandPalette.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -156,6 +157,7 @@
 		FB22EC61F26AACB3D0D6CF92 /* ACPProtocolParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACPProtocolParser.swift; sourceTree = "<group>"; };
 		FBB42B335736713118836671 /* AIsViewModelFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIsViewModelFilterTests.swift; sourceTree = "<group>"; };
 		FFA11E838AE2679B1BC86555 /* AgentEventStoreGenUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventStoreGenUITests.swift; sourceTree = "<group>"; };
+		FA0737BE704B4ABC77D3910FA1610BA1 /* SlashCommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandPalette.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -212,6 +214,7 @@
 			isa = PBXGroup;
 			children = (
 				96D483BF8D54AAAB825830A9 /* WorkView.swift */,
+				FA0737BE704B4ABC77D3910FA1610BA1 /* SlashCommandPalette.swift */,
 				B3D68F90B83811799B3E6901 /* WorkViewModel.swift */,
 				20FCC1FEF6195E62AE983F42 /* Canvas */,
 				4606F4D1DD58C5D6F8EB7BF1 /* Cards */,
@@ -585,6 +588,7 @@
 				2C5239168B0582BCC6F2013C /* WorkTranscriptMapper.swift in Sources */,
 				1A6D39EC3E8A6D8A465090AD /* WorkTranscriptView.swift in Sources */,
 				71DCDFC3C534AE7B3FF25260 /* WorkView.swift in Sources */,
+				7B738623644EAC45DEC63B87A7AAE2B4 /* SlashCommandPalette.swift in Sources */,
 				610D21BA285D1A93482CE33F /* WorkViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

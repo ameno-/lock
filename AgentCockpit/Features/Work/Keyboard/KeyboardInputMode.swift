@@ -8,6 +8,8 @@ struct KeyboardInputMode: View {
     var onAbort: () -> Void
     var onSnippetToggle: () -> Void
     @FocusState private var isInputFocused: Bool
+    @State private var isCommandPalettePresented = false
+    @State private var lastProcessedText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,6 +80,36 @@ struct KeyboardInputMode: View {
         .onAppear {
             isInputFocused = true
         }
+        .sheet(isPresented: $isCommandPalettePresented) {
+            SlashCommandPalette(
+                commands: AvailableCommand.defaultCommands,
+                isPresented: $isCommandPalettePresented,
+                onSelect: { command in
+                    insertCommand(command)
+                }
+            )
+        }
+        .onChange(of: text) { _, newText in
+            detectSlashCommand(newText: newText)
+        }
+    }
+
+    private func detectSlashCommand(newText: String) {
+        // Detect when user types "/" at the beginning of input
+        if newText == "/" && lastProcessedText.isEmpty {
+            isCommandPalettePresented = true
+            text = ""  // Clear the slash
+        }
+        lastProcessedText = newText
+    }
+
+    private func insertCommand(_ command: AvailableCommand) {
+        if let hint = command.inputHint {
+            text = "/\(command.name) <\(hint)>"
+        } else {
+            text = "/\(command.name)"
+        }
+        isInputFocused = true
     }
 
     private func pasteFromClipboard() {
