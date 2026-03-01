@@ -91,8 +91,6 @@ struct RetroChatView: View {
             }
             .padding(.horizontal, 10)
         }
-        .ignoresSafeArea(.keyboard)
-        .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -105,6 +103,14 @@ struct RetroChatView: View {
         }
         .safeAreaInset(edge: .bottom) {
             messageInputSection
+                .onTapGesture {
+                    isInputFocused = true
+                }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                isInputFocused = true
+            }
         }
     }
 
@@ -162,7 +168,7 @@ struct RetroChatView: View {
             messages.append(newUserMsg)
         }
 
-        isInputFocused = false
+        isInputFocused = true
 
         withAnimation(.spring(duration: 0.5)) {
             agentState = .thinking
