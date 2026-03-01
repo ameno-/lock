@@ -72,7 +72,7 @@ struct RetroChatView: View {
                     isInputFocused = false
                 }
                 .foregroundColor(.olive)
-                .font(.custom("Courier New", size: 14))
+                .font(.system(.body))
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -181,7 +181,7 @@ struct RetroInputSection: View {
     var body: some View {
         HStack(spacing: 12) {
             TextField("Type your message...", text: $inputText)
-                .font(.custom("Courier New", size: 14))
+                .font(.system(.body))
                 .focused(isInputFocused)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -200,7 +200,7 @@ struct RetroInputSection: View {
 
             Button(action: onSend) {
                 Text("Send")
-                    .font(.custom("Courier New", size: 14).weight(.bold))
+                    .font(.system(.body).weight(.semibold))
                     .foregroundColor(.cream)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -386,7 +386,7 @@ struct RetroMessageBubbleView: View {
 
             if message.isUser {
                 Text(message.text)
-                    .font(.custom("Courier New", size: 13))
+                    .font(.body)
                     .foregroundColor(.cream)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -399,7 +399,7 @@ struct RetroMessageBubbleView: View {
                     .shadow(color: .shadowSoft, radius: 0, x: 2, y: 2)
             } else {
                 Text(message.text)
-                    .font(.custom("Courier New", size: 13))
+                    .font(.body)
                     .foregroundColor(.oliveDark)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
