@@ -41,29 +41,6 @@ extension Color {
     }
 }
 
-// MARK: - Retro Style Modifiers
-struct RetroCardStyle: ViewModifier {
-    var cornerRadius: CGFloat = 24
-    var shadowOffset: CGFloat = 6
-
-    func body(content: Content) -> some View {
-        content
-            .background(Color.cream)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(Color.olive, lineWidth: 2)
-            )
-            .shadow(color: .shadowHard, radius: 0, x: shadowOffset, y: shadowOffset)
-    }
-}
-
-extension View {
-    func retroCard(cornerRadius: CGFloat = 24, shadowOffset: CGFloat = 6) -> some View {
-        self.modifier(RetroCardStyle(cornerRadius: cornerRadius, shadowOffset: shadowOffset))
-    }
-}
-
 // MARK: - Main View - Borderless Integrated Retro Chat
 struct RetroChatView: View {
     @State private var messages: [ChatMessage] = [
@@ -83,9 +60,6 @@ struct RetroChatView: View {
 
                 RetroAvatarSection(agentState: $agentState)
                     .padding(.vertical, 10)
-
-                RetroStatusText(agentState: agentState)
-                    .padding(.bottom, 6)
 
                 messagesScrollView
             }
@@ -197,26 +171,6 @@ struct RetroChatView: View {
     }
 }
 
-// MARK: - Status text
-struct RetroStatusText: View {
-    let agentState: AgentState
-
-    var body: some View {
-        Text(statusString)
-            .font(.custom("Courier New", size: 12))
-            .foregroundColor(.oliveLight)
-            .animation(.easeInOut(duration: 0.3), value: agentState)
-    }
-
-    var statusString: String {
-        switch agentState {
-        case .idle: return "Ready to chat"
-        case .thinking: return "Thinking..."
-        case .typing: return "Typing..."
-        }
-    }
-}
-
 // MARK: - Input Section with Focus
 struct RetroInputSection: View {
     @Binding var inputText: String
@@ -281,22 +235,9 @@ struct RetroAvatarSection: View {
     @Binding var agentState: AgentState
 
     var body: some View {
-        ZStack {
-            RetroMorphingAvatar(state: agentState)
-                .frame(width: 100, height: 100)
-                .retroCard(cornerRadius: 20, shadowOffset: 3)
-                .zIndex(1)
-
-            HStack {
-                RetroReactionButton(icon: "hand.thumbsdown", isPositive: false)
-                    .offset(x: -20)
-                Spacer()
-                RetroReactionButton(icon: "hand.thumbsup", isPositive: true)
-                    .offset(x: 20)
-            }
-            .frame(width: 160)
-            .zIndex(0)
-        }
+        RetroMorphingAvatar(state: agentState)
+            .frame(width: 92, height: 92)
+            .accessibilityIdentifier("retro-agent-avatar")
     }
 }
 
@@ -306,7 +247,7 @@ struct RetroMorphingAvatar: View {
 
     @State private var floatOffset: CGFloat = 0
     @State private var rotation: Double = 0
-    @State private var pulseScale: CGFloat = 1.0
+    @State private var morphOffset: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -324,60 +265,87 @@ struct RetroMorphingAvatar: View {
     }
 
     private var idleAvatar: some View {
-        Circle()
-            .fill(LinearGradient(colors: [.cream, .sand], startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay(Circle().stroke(Color.olive, lineWidth: 2))
-            .overlay(
-                Text(":)")
-                    .font(.custom("Courier New", size: 28).weight(.bold))
-                    .foregroundColor(.olive)
-            )
-            .offset(y: floatOffset)
-            .rotationEffect(.degrees(floatOffset * 0.5))
-            .onAppear {
-                withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                    floatOffset = -6
-                }
+        ZStack {
+            RoundedRectangle(cornerRadius: morphCornerRadius, style: .continuous)
+                .fill(LinearGradient(colors: [.cream, .sand], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 92, height: 92)
+                .offset(y: floatOffset)
+
+            Circle()
+                .fill(Color.coralLight.opacity(0.45))
+                .frame(width: 28, height: 28)
+                .offset(x: -14 + morphOffset * 8, y: -12 - morphOffset * 4)
+
+            Circle()
+                .fill(Color.olive.opacity(0.2))
+                .frame(width: 16, height: 16)
+                .offset(x: 12 - morphOffset * 12, y: 14 + morphOffset * 4)
+        }
+        .rotationEffect(.degrees(Double(floatOffset)))
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                floatOffset = -6
             }
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                morphOffset = 1
+            }
+        }
     }
 
     private var thinkingAvatar: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 32)
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
                 .fill(LinearGradient(colors: [.coralLight, .sand], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay(RoundedRectangle(cornerRadius: 32).stroke(Color.olive, lineWidth: 2))
+                .frame(width: 96, height: 84)
                 .rotationEffect(.degrees(rotation))
 
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(LinearGradient(colors: [.sand, .coralLight], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 70, height: 70)
-                .rotationEffect(.degrees(-rotation * 1.5))
+                .frame(width: 52, height: 68)
+                .rotationEffect(.degrees(-rotation * 1.4))
         }
         .onAppear {
             withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
                 rotation = 360
             }
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                morphOffset = 0.7
+            }
+            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                floatOffset = -8
+            }
         }
+        .frame(width: 96, height: 92)
     }
 
     private var typingAvatar: some View {
-        Circle()
-            .fill(RadialGradient(colors: [.coralLight, .coral], center: .topLeading, startRadius: 10, endRadius: 60))
-            .overlay(Circle().stroke(Color.olive, lineWidth: 2))
-            .scaleEffect(pulseScale)
-            .overlay {
-                HStack(spacing: 3) {
-                    RetroDot()
-                    RetroDot(delay: 0.15)
-                    RetroDot(delay: 0.3)
-                }
+        ZStack {
+            RoundedRectangle(cornerRadius: morphCornerRadius, style: .continuous)
+                .fill(RadialGradient(colors: [.coralLight, .coral], center: .topLeading, startRadius: 8, endRadius: 62))
+                .frame(width: 88, height: 88)
+                .scaleEffect(1.0 + morphOffset * 0.06)
+
+            HStack(spacing: 3) {
+                RetroDot()
+                RetroDot(delay: 0.15)
+                RetroDot(delay: 0.3)
             }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    pulseScale = 1.08
-                }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                morphOffset = 1
             }
+            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                floatOffset = -4
+            }
+        }
     }
+
+    private var morphCornerRadius: CGFloat {
+        let progress = (sin(rotation + Double(morphOffset) * 2) + 1) / 2
+        return 18 + CGFloat(progress * 26)
+    }
+
 }
 
 struct RetroDot: View {
@@ -387,44 +355,13 @@ struct RetroDot: View {
     var body: some View {
         Circle()
             .fill(Color.olive)
-            .frame(width: 5, height: 5)
+            .frame(width: 6, height: 6)
             .offset(y: offset)
             .onAppear {
                 withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true).delay(delay)) {
-                    offset = -3
+                    offset = -4
                 }
             }
-    }
-}
-
-// MARK: - Reaction Button
-struct RetroReactionButton: View {
-    let icon: String
-    let isPositive: Bool
-
-    @State private var isPressed = false
-
-    var body: some View {
-        Button(action: handleTap) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.olive)
-                .frame(width: 48, height: 48)
-                .background(isPressed ? (isPositive ? Color.sand : Color.coralLight) : Color.cream)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.olive, lineWidth: 2))
-                .shadow(color: .shadowHard, radius: 0, x: isPressed ? 1 : 2, y: isPressed ? 1 : 2)
-                .scaleEffect(isPressed ? 0.95 : 1.0)
-        }
-    }
-
-    private func handleTap() {
-        withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.5)) {
-            isPressed = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.easeOut(duration: 0.2)) { isPressed = false }
-        }
     }
 }
 
@@ -437,31 +374,61 @@ struct RetroMessageBubbleView: View {
             if !message.isUser {
                 Circle()
                     .fill(LinearGradient(colors: [.coralLight, .sand], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 28, height: 28)
-                    .overlay(Circle().stroke(Color.olive, lineWidth: 1.5))
-                    .overlay(Text("AI").font(.custom("Courier New", size: 8).weight(.bold)).foregroundColor(.olive))
+                    .frame(width: 26, height: 26)
+                    .overlay(
+                        Circle()
+                            .fill(Color.olive.opacity(0.18))
+                            .frame(width: 8, height: 8)
+                    )
             } else {
                 Spacer(minLength: 38)
             }
 
-            Text(message.text)
-                .font(.custom("Courier New", size: 13))
-                .foregroundColor(message.isUser ? .cream : .olive)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(message.isUser ? Color.olive : Color.cream)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(message.isUser ? Color.oliveDark : Color.olive, lineWidth: 2)
-                )
-                .shadow(color: .shadowSoft, radius: 0, x: 2, y: 2)
+            if message.isUser {
+                Text(message.text)
+                    .font(.custom("Courier New", size: 13))
+                    .foregroundColor(.cream)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.olive)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.oliveDark, lineWidth: 2)
+                    )
+                    .shadow(color: .shadowSoft, radius: 0, x: 2, y: 2)
+            } else {
+                Text(message.text)
+                    .font(.custom("Courier New", size: 13))
+                    .foregroundColor(.oliveDark)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(LinearGradient(
+                                    colors: [Color(hex: 0xFDF9ED), Color(hex: 0xF4EFD7)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(Color.olive.opacity(0.05))
+                                .padding(2)
+                        }
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .shadow(color: .shadowSoft, radius: 4, x: 1, y: 2)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(Color.white.opacity(0.2))
+                            .blendMode(.screen)
+                    }
+            }
 
             if message.isUser {
                 Circle()
                     .fill(Color.olive)
                     .frame(width: 28, height: 28)
-                    .overlay(Circle().stroke(Color.oliveDark, lineWidth: 1.5))
                     .overlay(Image(systemName: "person.fill").font(.system(size: 12)).foregroundColor(.cream))
             } else {
                 Spacer(minLength: 38)
