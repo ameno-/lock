@@ -163,6 +163,20 @@ public final class AgentEventStore {
         }
     }
 
+    public func removeGenUISurface(surfaceID: String, sessionKey: String) {
+        allEvents.removeAll { event in
+            guard case .genUI(let genui) = event else { return false }
+            return genui.surfaceID == surfaceID
+        }
+        if var events = sessionEvents[sessionKey] {
+            events.removeAll { event in
+                guard case .genUI(let genui) = event else { return false }
+                return genui.surfaceID == surfaceID
+            }
+            sessionEvents[sessionKey] = events
+        }
+    }
+
     public func clear(sessionKey: String) {
         sessionEvents.removeValue(forKey: sessionKey)
         sessionDigests.removeValue(forKey: sessionKey)

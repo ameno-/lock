@@ -7,12 +7,26 @@ struct KeyboardInputMode: View {
     var onSend: (String) -> Void
     var onAbort: () -> Void
     var onSnippetToggle: () -> Void
+    var snippetStackCount: Int = 0
+    var onExecuteStack: (() -> Void)?
+    var onClearStack: (() -> Void)?
     @FocusState private var isInputFocused: Bool
     @State private var isCommandPalettePresented = false
     @State private var lastProcessedText = ""
+    var quickReplyChips: [QuickReplyChip] = []
+    var onQuickTextReply: ((String) -> Void)?
+    var onQuickGenUIAction: ((GenUIEvent) -> Void)?
+    var onQuickApprovalDecision: ((String, ACApprovalDecision) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
+            QuickReplyStrip(
+                chips: quickReplyChips,
+                onTextReply: onQuickTextReply,
+                onGenUIAction: onQuickGenUIAction,
+                onApprovalDecision: onQuickApprovalDecision
+            )
+
             TextField("Message the agent…", text: $text, axis: .vertical)
                 .font(.system(.body))
                 .lineLimit(1 ... 4)

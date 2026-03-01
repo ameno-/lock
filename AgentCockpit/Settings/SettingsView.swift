@@ -175,6 +175,17 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Labs") {
+                NavigationLink {
+                    GenUIComponentShowcase()
+                } label: {
+                    Label("Component Showcase", systemImage: "rectangle.3.group")
+                }
+                Text("Visual showcase of all GenUI component types: timeline, decision, risk gate, diff, code, key-value.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("About") {
                 LabeledContent("Version", value: "1.0.0")
                 LabeledContent("Endpoint Mode", value: settings.serverProtocol.displayName)

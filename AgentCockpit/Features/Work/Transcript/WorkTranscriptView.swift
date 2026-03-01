@@ -3,6 +3,8 @@ import SwiftUI
 struct WorkTranscriptView: View {
     let events: [CanvasEvent]
     let displayMode: ACTranscriptDisplayMode
+    let activityGenUIEnabled: Bool
+    let filterPromotedSurfaces: Bool
     var onViewSubAgentInAIs: ((SubAgentEvent) -> Void)?
     var onGenUIAction: ((GenUIEvent) -> Void)?
     var genUIActionState: ((String, String) -> GenUIActionDispatchState?)?
@@ -13,19 +15,25 @@ struct WorkTranscriptView: View {
     private var entries: [WorkTranscriptEntry] {
         WorkTranscriptMapper.entries(
             from: events,
-            policy: WorkTranscriptDisplayPolicy(displayMode: displayMode)
+            policy: WorkTranscriptDisplayPolicy(displayMode: displayMode),
+            activityGenUIEnabled: activityGenUIEnabled,
+            filterPromotedSurfaces: filterPromotedSurfaces
         )
     }
 
     init(
         events: [CanvasEvent],
         displayMode: ACTranscriptDisplayMode = .standard,
+        activityGenUIEnabled: Bool = true,
+        filterPromotedSurfaces: Bool = false,
         onViewSubAgentInAIs: ((SubAgentEvent) -> Void)? = nil,
         onGenUIAction: ((GenUIEvent) -> Void)? = nil,
         genUIActionState: ((String, String) -> GenUIActionDispatchState?)? = nil
     ) {
         self.events = events
         self.displayMode = displayMode
+        self.activityGenUIEnabled = activityGenUIEnabled
+        self.filterPromotedSurfaces = filterPromotedSurfaces
         self.onViewSubAgentInAIs = onViewSubAgentInAIs
         self.onGenUIAction = onGenUIAction
         self.genUIActionState = genUIActionState

@@ -141,6 +141,103 @@ struct DefaultGenUISurfaceParser: GenUISurfaceParsing {
                 }
                 parsed.append(.actions(GenUIActionsComponent(id: id, items: actions)))
 
+            case "timeline":
+                let rawSteps = raw["steps"]?.arrayValue ?? raw["items"]?.arrayValue ?? []
+                var steps: [GenUITimelineComponent.Step] = []
+                steps.reserveCapacity(rawSteps.count)
+                for (stepIndex, stepAny) in rawSteps.enumerated() {
+                    guard let step = stepAny.dictValue else { continue }
+                    let stepID = normalizedString(step["id"]) ?? "step-\(stepIndex)"
+                    let label = normalizedString(step["label"])
+                        ?? normalizedString(step["text"])
+                        ?? "Step \(stepIndex + 1)"
+                    let stateRaw = normalizedString(step["state"])
+                        ?? normalizedString(step["status"])
+                        ?? "pending"
+                    let state = GenUITimelineComponent.StepState(rawValue: stateRaw) ?? .pending
+                    let detail = normalizedString(step["detail"]) ?? normalizedString(step["description"])
+                    steps.append(.init(id: stepID, label: label, state: state, detail: detail))
+                }
+                parsed.append(.timeline(GenUITimelineComponent(
+                    id: id,
+                    title: normalizedString(raw["title"]),
+                    steps: steps
+                )))
+
+            case "decision":
+                let prompt = normalizedString(raw["prompt"])
+                    ?? normalizedString(raw["question"])
+                    ?? "Choose an option"
+                let rawOptions = raw["options"]?.arrayValue ?? raw["choices"]?.arrayValue ?? []
+                var options: [GenUIDecisionComponent.Option] = []
+                options.reserveCapacity(rawOptions.count)
+                for (optIndex, optAny) in rawOptions.enumerated() {
+                    guard let opt = optAny.dictValue else { continue }
+                    let optID = normalizedString(opt["id"]) ?? "option-\(optIndex)"
+                    let label = normalizedString(opt["label"]) ?? "Option \(optIndex + 1)"
+                    let desc = normalizedString(opt["description"]) ?? normalizedString(opt["detail"])
+                    options.append(.init(id: optID, label: label, description: desc, payload: opt))
+                }
+                parsed.append(.decision(GenUIDecisionComponent(id: id, prompt: prompt, options: options)))
+
+            case "diff", "diff_preview", "diffpreview":
+                let diff = normalizedString(raw["diff"])
+                    ?? normalizedString(raw["content"])
+                    ?? normalizedString(raw["text"])
+                    ?? ""
+                let filePath = normalizedString(raw["filePath"]) ?? normalizedString(raw["file"])
+                let additions = raw["additions"]?.intValue ?? 0
+                let deletions = raw["deletions"]?.intValue ?? 0
+                if !diff.isEmpty {
+                    parsed.append(.diffPreview(GenUIDiffPreviewComponent(
+                        id: id, filePath: filePath, diff: diff,
+                        additions: additions, deletions: deletions
+                    )))
+                }
+
+            case "risk_gate", "riskgate", "risk":
+                let levelRaw = normalizedString(raw["level"])
+                    ?? normalizedString(raw["risk"])
+                    ?? "medium"
+                let level = GenUIRiskGateComponent.RiskLevel(rawValue: levelRaw) ?? .medium
+                let summary = normalizedString(raw["summary"])
+                    ?? normalizedString(raw["label"])
+                    ?? normalizedString(raw["text"])
+                    ?? "Review required"
+                let detail = normalizedString(raw["detail"]) ?? normalizedString(raw["description"])
+                parsed.append(.riskGate(GenUIRiskGateComponent(
+                    id: id, level: level, summary: summary, detail: detail
+                )))
+
+            case "key_value", "keyvalue", "kv":
+                let rawPairs = raw["pairs"]?.arrayValue ?? raw["items"]?.arrayValue ?? []
+                var pairs: [GenUIKeyValueComponent.Pair] = []
+                pairs.reserveCapacity(rawPairs.count)
+                for (pairIndex, pairAny) in rawPairs.enumerated() {
+                    guard let pair = pairAny.dictValue else { continue }
+                    let pairID = normalizedString(pair["id"]) ?? "kv-\(pairIndex)"
+                    let key = normalizedString(pair["key"]) ?? normalizedString(pair["label"]) ?? "Key"
+                    let value = normalizedString(pair["value"]) ?? "—"
+                    pairs.append(.init(id: pairID, key: key, value: value))
+                }
+                if !pairs.isEmpty {
+                    parsed.append(.keyValue(GenUIKeyValueComponent(
+                        id: id, title: normalizedString(raw["title"]), pairs: pairs
+                    )))
+                }
+
+            case "code", "code_block", "codeblock":
+                let code = normalizedString(raw["code"])
+                    ?? normalizedString(raw["content"])
+                    ?? normalizedString(raw["text"])
+                    ?? ""
+                let language = normalizedString(raw["language"]) ?? normalizedString(raw["lang"])
+                if !code.isEmpty {
+                    parsed.append(.codeBlock(GenUICodeBlockComponent(
+                        id: id, language: language, code: code
+                    )))
+                }
+
             default:
                 continue
             }

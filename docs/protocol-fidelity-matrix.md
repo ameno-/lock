@@ -62,6 +62,11 @@ This matrix tracks runtime fidelity for AgentCockpit across:
 | GenUI action dispatch UX state | ✅ | Action buttons now surface sending/success/failure state in Work UI. |
 | GenUI surface persistence | ✅ | Latest per-session surfaces are persisted locally and rehydrated on app launch. |
 | Pending GenUI action recovery | ✅ | Pending callbacks persist and retry when the related session is activated. |
+| GenUI Surface Dock | ✅ | Collapsible horizontal dock rendering promoted surfaces (pinned or standard prefixes like `session.plan`). |
+| GenUI expanded components | ✅ | 6 native types: timeline, decision, diffPreview, riskGate, keyValue, codeBlock. |
+| Approval surface synthesis | ✅ | Pending approvals converted to GenUI surfaces with riskGate + codeBlock components. |
+| Session reorientation synthesis | ✅ | Auto-generated session overview on activation with key-value metadata + recent activity timeline. |
+| Quick reply strip | ✅ | Contextual chips above keyboard (approval accept/decline, continue/abort/yes/no). |
 | Composer ergonomics | ✅ improved | Compact message composer replaces oversized modifier strip layout. |
 
 ## Agmente Parity Gaps (Intentional / Pending)

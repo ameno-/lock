@@ -11,37 +11,6 @@ struct WorkView: View {
     }
 
     var body: some View {
-        content
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
-            .navigationTitle("Session")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .bottom, spacing: 0) { keyboardInset }
-            .toolbar { toolbarContent }
-            .alert("Error", isPresented: errorPresented) {
-                Button("OK") { viewModel.errorMessage = nil }
-            } message: {
-                Text(viewModel.errorMessage ?? "")
-            }
-            .sheet(isPresented: userInputPresented) {
-                userInputSheet
-            }
-            .onAppear {
-                viewModel.subscribeToActive()
-                if activeUserInputRequestID == nil {
-                    activeUserInputRequestID = viewModel.pendingUserInputRequests.first?.id
-                }
-            }
-            .onChange(of: appModel.promotedSessionKey) { _, _ in
-                viewModel.activateSessionIfNeeded()
-            }
-            .onChange(of: viewModel.pendingUserInputRequests.map(\.id)) { _, _ in
-                if activeUserInputRequestID == nil {
-                    activeUserInputRequestID = viewModel.pendingUserInputRequests.first?.id
-                }
-            }
-    }
-
-    private var content: some View {
         VStack(spacing: 0) {
             if !viewModel.pendingApprovalRequests.isEmpty {
                 approvalQueueSection
@@ -52,101 +21,117 @@ struct WorkView: View {
                 SubAgentTickerBar(agents: viewModel.runningSubAgents)
             }
 
+            SurfaceDockView(
+                surfaces: viewModel.promotedSurfaces,
+                onGenUIAction: { event in
+                    viewModel.performGenUIAction(event)
+                },
+                genUIActionState: { surfaceID, actionID in
+                    viewModel.genUIActionState(surfaceID: surfaceID, actionID: actionID)
+                }
+            )
+
             Group {
                 if viewModel.canvasEvents.isEmpty {
                     emptyState
                 } else {
-                    transcript
+                    WorkTranscriptView(
+                        events: viewModel.canvasEvents,
+                        displayMode: appModel.settings.transcriptDisplayMode,
+                        activityGenUIEnabled: appModel.settings.activityGenUIEnabled,
+                        filterPromotedSurfaces: !viewModel.promotedSurfaces.isEmpty,
+                        onViewSubAgentInAIs: { _ in
+                            appModel.selectedTab = .sessions
+                        },
+                        onGenUIAction: { event in
+                            viewModel.performGenUIAction(event)
+                        },
+                        genUIActionState: { surfaceID, actionID in
+                            viewModel.genUIActionState(surfaceID: surfaceID, actionID: actionID)
+                        }
+                    )
                 }
             }
             .background(Color(.systemGroupedBackground))
         }
-    }
-
-    private var transcript: some View {
-        WorkTranscriptView(
-            events: viewModel.canvasEvents,
-            displayMode: appModel.settings.transcriptDisplayMode,
-            onViewSubAgentInAIs: { _ in
-                appModel.selectedTab = .sessions
-            },
-            onGenUIAction: { event in
-                viewModel.performGenUIAction(event)
-            },
-            genUIActionState: { surfaceID, actionID in
-                viewModel.genUIActionState(surfaceID: surfaceID, actionID: actionID)
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .navigationTitle("Session")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider().opacity(0.3)
+                InlineAgenticKeyboard(
+                    text: $viewModel.inputText,
+                    onSend: { text in _ = viewModel.send(text: text) },
+                    onAbort: { viewModel.abort() },
+                    onSnippetInsert: { snippet in viewModel.queueSnippetForInsert(snippet) },
+                    onExecuteStack: { _ = viewModel.executeSnippetStack() },
+                    onClearStack: { viewModel.clearSnippetStack() },
+                    snippetStackCount: viewModel.snippetStackCount,
+                    snippetCategories: viewModel.snippetCategories,
+                    quickReplyChips: viewModel.quickReplyChips,
+                    onQuickTextReply: { text in _ = viewModel.send(text: text) },
+                    onQuickGenUIAction: { event in viewModel.performGenUIAction(event) },
+                    onQuickApprovalDecision: { id, decision in viewModel.decideApproval(requestID: id, decision: decision) }
+                )
             }
-        )
-    }
-
-    private var keyboardInset: some View {
-        VStack(spacing: 0) {
-            Divider().opacity(0.3)
-            InlineAgenticKeyboard(
-                text: $viewModel.inputText,
-                onSend: { text in viewModel.send(text: text) },
-                onAbort: { viewModel.abort() },
-                snippetCategories: viewModel.snippetCategories
-            )
+            .background(.ultraThinMaterial)
         }
-        .background(.ultraThinMaterial)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            VStack(spacing: 2) {
-                Text("Session")
-                    .font(.headline)
-                if let key = viewModel.activeSessionKey {
-                    Text(key.prefix(20))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 2) {
+                    Text("Session")
+                        .font(.headline)
+                    if let key = viewModel.activeSessionKey {
+                        Text(key.prefix(20))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            StatusPill(state: viewModel.connectionState)
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            NavigationLink {
-                GenUIDemoView()
-                    .environment(appModel)
-            } label: {
-                Image(systemName: "puzzlepiece.extension")
+            ToolbarItem(placement: .navigationBarTrailing) {
+                StatusPill(state: viewModel.connectionState)
             }
-            .accessibilityLabel("Open GenUI Demo")
         }
-    }
-
-    private var errorPresented: Binding<Bool> {
-        .init(
+        .alert("Error", isPresented: .init(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
-        )
-    }
-
-    private var userInputPresented: Binding<Bool> {
-        .init(
+        )) {
+            Button("OK") { viewModel.errorMessage = nil }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+        .sheet(isPresented: .init(
             get: { activeUserInputRequest != nil },
             set: { if !$0 { activeUserInputRequestID = nil } }
-        )
-    }
-
-    @ViewBuilder
-    private var userInputSheet: some View {
-        if let request = activeUserInputRequest {
-            PendingUserInputSheet(
-                request: request,
-                onSubmit: { answers in
-                    viewModel.submitUserInput(requestID: request.id, answers: answers)
-                    advanceUserInputQueue()
-                },
-                onSkip: {
-                    viewModel.dismissUserInput(requestID: request.id)
-                    advanceUserInputQueue()
-                }
-            )
+        )) {
+            if let request = activeUserInputRequest {
+                PendingUserInputSheet(
+                    request: request,
+                    onSubmit: { answers in
+                        viewModel.submitUserInput(requestID: request.id, answers: answers)
+                        advanceUserInputQueue()
+                    },
+                    onSkip: {
+                        viewModel.dismissUserInput(requestID: request.id)
+                        advanceUserInputQueue()
+                    }
+                )
+            }
+        }
+        .onAppear {
+            viewModel.subscribeToActive()
+            if activeUserInputRequestID == nil {
+                activeUserInputRequestID = viewModel.pendingUserInputRequests.first?.id
+            }
+        }
+        .onChange(of: appModel.promotedSessionKey) { _, _ in
+            viewModel.activateSessionIfNeeded()
+        }
+        .onChange(of: viewModel.pendingUserInputRequests.map(\.id)) { _, _ in
+            if activeUserInputRequestID == nil {
+                activeUserInputRequestID = viewModel.pendingUserInputRequests.first?.id
+            }
         }
     }
 

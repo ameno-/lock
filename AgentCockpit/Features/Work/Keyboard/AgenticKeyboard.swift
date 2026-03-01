@@ -34,11 +34,18 @@ struct InlineAgenticKeyboard: View {
     @Binding var text: String
     var onSend: (String) -> Void
     var onAbort: () -> Void
+    var onSnippetInsert: (String) -> Void
+    var onExecuteStack: () -> Void
+    var onClearStack: () -> Void
+    var snippetStackCount: Int
     var snippetCategories: [SnippetCategory]
+    var quickReplyChips: [QuickReplyChip] = []
+    var onQuickTextReply: ((String) -> Void)?
+    var onQuickGenUIAction: ((GenUIEvent) -> Void)?
+    var onQuickApprovalDecision: ((String, ACApprovalDecision) -> Void)?
 
     @State private var isSnippetMode = false
     @State private var selectedCategory: String = ""
-    @Namespace private var ns
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,8 +53,7 @@ struct InlineAgenticKeyboard: View {
                 KeyboardSnippetMode(
                     selectedCategory: $selectedCategory,
                     onInsert: { snippet in
-                        text += snippet
-                        isSnippetMode = false
+                        onSnippetInsert(snippet)
                     },
                     onDismiss: {
                         withAnimation(.spring(duration: 0.25)) { isSnippetMode = false }
@@ -61,11 +67,15 @@ struct InlineAgenticKeyboard: View {
                     onSend: onSend,
                     onAbort: onAbort,
                     onSnippetToggle: {
-                        if selectedCategory.isEmpty, let first = snippetCategories.first {
-                            selectedCategory = first.id
-                        }
                         withAnimation(.spring(duration: 0.25)) { isSnippetMode = true }
-                    }
+                    },
+                    snippetStackCount: snippetStackCount,
+                    onExecuteStack: onExecuteStack,
+                    onClearStack: onClearStack,
+                    quickReplyChips: quickReplyChips,
+                    onQuickTextReply: onQuickTextReply,
+                    onQuickGenUIAction: onQuickGenUIAction,
+                    onQuickApprovalDecision: onQuickApprovalDecision
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }

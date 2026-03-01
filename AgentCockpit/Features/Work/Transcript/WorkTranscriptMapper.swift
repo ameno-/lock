@@ -62,7 +62,9 @@ enum WorkTranscriptMapper {
 
     static func entries(
         from events: [CanvasEvent],
-        policy: WorkTranscriptDisplayPolicy
+        policy: WorkTranscriptDisplayPolicy,
+        activityGenUIEnabled: Bool = false,
+        filterPromotedSurfaces: Bool = false
     ) -> [WorkTranscriptEntry] {
         guard !events.isEmpty else { return [] }
 

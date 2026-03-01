@@ -79,11 +79,19 @@ Implemented in this iteration:
 - ACP and Codex request flows for session/thread creation, list, hydration, prompt/turn
 - session-first Agmente-style mobile navigation and cards
 - explicit approval and request-user-input handling in Work view
-- GenUI event routing + renderer card scaffold
+- GenUI event routing + component renderer + persisted surface/action state
+- GenUI action callback fallback probing and method caching for ACP/Codex
+- transcript-mode rendering with GenUI-aware scaffold suppression and debug/text-only views
 - ACP session list parsing hardening (`id/title/cwd/timestamps` variants)
 - auth header support (Bearer + Cloudflare Access)
-- capability-negotiated GenUI callback method routing (ACP/Codex)
-- persisted GenUI surfaces + pending action recovery on session reactivation
+- GenUI Surface Dock with promoted surfaces (horizontal dock above event stream)
+- GenUI component renderer with 6 native types: timeline, decision, diffPreview, riskGate, keyValue, codeBlock
+- ApprovalSurfaceSynthesizer converting pending approvals to GenUI surfaces with risk assessment
+- SessionReorientationSynthesizer generating session overview on activation
+- QuickReplyStrip with contextual chips (approval actions, continue/abort/yes/no)
+- GenUIComponentShowcase in Settings > Labs for visual component verification
+- SessionBrowserView for session management and search
+- SlashCommandPalette with /command support
 
 Recommended next increments:
 
