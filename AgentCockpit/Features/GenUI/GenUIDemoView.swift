@@ -37,11 +37,11 @@ struct GenUIDemoView: View {
                 }
 
                 Picker("Sample", selection: $selectedSample) {
-                    ForEach(GenUIDemoSample.allCases) { sample in
+                    ForEach(GenUIDemoSample.all) { sample in
                         Text(sample.title).tag(sample)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .onChange(of: selectedSample) { _, _ in
                     patchRevision = 0
                     surfaceID = UUID().uuidString
@@ -189,18 +189,36 @@ struct GenUIDemoView: View {
     }()
 }
 
-private enum GenUIDemoSample: String, CaseIterable, Identifiable {
+private enum GenUIDemoSample: Hashable, Identifiable {
     case taskPlan
     case testRun
     case release
+    case showcase(sampleID: String)
 
-    var id: String { rawValue }
+    static let all: [GenUIDemoSample] = {
+        var values: [GenUIDemoSample] = [.taskPlan, .testRun, .release]
+        for sample in GenUIShowcaseData.samples {
+            values.append(.showcase(sampleID: sample.id))
+        }
+        return values
+    }()
+
+    var id: String {
+        switch self {
+        case .taskPlan: return "legacy-taskPlan"
+        case .testRun: return "legacy-testRun"
+        case .release: return "legacy-release"
+        case .showcase(sampleID: let sampleID): return "showcase-\(sampleID)"
+        }
+    }
 
     var title: String {
         switch self {
         case .taskPlan: return "Task Plan"
         case .testRun: return "Test Run"
         case .release: return "Release"
+        case .showcase(sampleID: let sampleID):
+            return GenUIShowcaseData.samples.first(where: { $0.id == sampleID })?.title ?? sampleID
         }
     }
 
@@ -348,6 +366,12 @@ private enum GenUIDemoSample: String, CaseIterable, Identifiable {
                 actionLabel: "Promote to 50%",
                 actionPayload: ["actionId": AnyCodable("promote")]
             )
+        case .showcase(sampleID: let sampleID):
+            let sample = GenUIShowcaseData.samples.first(where: { $0.id == sampleID })
+            guard let sample else {
+                return fallbackEvent(surfaceID: surfaceID)
+            }
+            return normalized(sample.event, surfaceID: surfaceID, mode: .snapshot, revision: max(sample.event.revision, 1))
         }
     }
 
@@ -444,6 +468,64 @@ private enum GenUIDemoSample: String, CaseIterable, Identifiable {
                 ],
                 actionPayload: ["actionId": AnyCodable("promote")]
             )
+        case .showcase(sampleID: let sampleID):
+            let sample = GenUIShowcaseData.samples.first(where: { $0.id == sampleID })
+            guard let sample else {
+                return fallbackEvent(surfaceID: surfaceID)
+            }
+            let base = normalized(
+                sample.event,
+                surfaceID: surfaceID,
+                mode: .patch,
+                revision: max(sample.event.revision, 1) + revision + 1
+            )
+            return base
         }
+    }
+
+    private func normalized(
+        _ source: GenUIEvent,
+        surfaceID: String,
+        mode: GenUIEvent.UpdateMode,
+        revision: Int
+    ) -> GenUIEvent {
+        GenUIEvent(
+            id: source.id,
+            schemaVersion: source.schemaVersion,
+            mode: mode,
+            surfaceID: surfaceID,
+            revision: revision,
+            correlationID: source.correlationID,
+            title: source.title,
+            body: source.body,
+            surfacePayload: source.surfacePayload,
+            contextPayload: source.contextPayload,
+            actionLabel: source.actionLabel,
+            actionPayload: source.actionPayload,
+            timestamp: source.timestamp
+        )
+    }
+
+    private func fallbackEvent(surfaceID: String) -> GenUIEvent {
+        GenUIEvent(
+            id: "demo/genui/\(surfaceID)",
+            schemaVersion: "v0",
+            mode: .snapshot,
+            surfaceID: surfaceID,
+            revision: 1,
+            correlationID: "demo-\(surfaceID)",
+            title: "Demo Surface",
+            body: "Fallback sample",
+            surfacePayload: [
+                "components": AnyCodable([
+                    AnyCodable([
+                        "id": AnyCodable("note"),
+                        "type": AnyCodable("text"),
+                        "text": AnyCodable("No preview available for this sample.")
+                    ])
+                ])
+            ],
+            timestamp: .now
+        )
     }
 }

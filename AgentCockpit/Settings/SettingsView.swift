@@ -181,7 +181,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Component Showcase", systemImage: "rectangle.3.group")
                 }
-                Text("Visual showcase of all GenUI component types: timeline, decision, risk gate, diff, code, key-value.")
+                Text("Visual showcase of all GenUI component types: text, metric, progress, checklist, actions, timeline, decision, diff, risk gate, key-value, code.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
