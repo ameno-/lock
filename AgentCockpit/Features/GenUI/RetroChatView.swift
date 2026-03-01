@@ -44,10 +44,12 @@ extension Color {
 // MARK: - Main View - Borderless Integrated Retro Chat
 struct RetroChatView: View {
     @State private var messages: [ChatMessage] = [
-        ChatMessage(text: "Hello! I'm your friendly AI assistant. How can I help you today?", isUser: false)
+        ChatMessage(text: "Hello! I'm your friendly AI assistant. Try typing 'showcase' to see GenUI components in-chat.", isUser: false)
     ]
     @State private var inputText: String = ""
     @State private var agentState: AgentState = .idle
+    @State private var nextShowcaseIndex: Int = 0
+    @State private var genUIActionStates: [String: GenUIActionDispatchState] = [:]
 
     @FocusState private var isInputFocused: Bool
 
@@ -93,12 +95,16 @@ struct RetroChatView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     ForEach(messages) { message in
-                        RetroMessageBubbleView(message: message)
-                            .id(message.id)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .bottom).combined(with: .opacity),
-                                removal: .opacity
-                            ))
+                        RetroMessageBubbleView(
+                            message: message,
+                            onGenUIAction: handleGenUIAction,
+                            genUIActionState: genUIActionState
+                        )
+                        .id(message.id)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity
+                        ))
                     }
                 }
                 .padding(.horizontal, 6)
@@ -134,9 +140,10 @@ struct RetroChatView: View {
 
     private func sendMessage() {
         guard agentState == .idle else { return }
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
 
-        let newUserMsg = ChatMessage(text: inputText, isUser: true)
+        let newUserMsg = ChatMessage(text: trimmed, isUser: true)
         inputText = ""
         withAnimation(.bouncy(duration: 0.4)) {
             messages.append(newUserMsg)
@@ -154,18 +161,96 @@ struct RetroChatView: View {
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if trimmed.lowercased().contains("showcase") || trimmed.lowercased().contains("genui") {
+                    let sample = GenUIShowcaseData.samples[nextShowcaseIndex % GenUIShowcaseData.samples.count]
+                    nextShowcaseIndex += 1
+                    let event = cloneShowcaseEvent(sample.event)
+                    let aiMsg = ChatMessage(
+                        text: "Here is a live GenUI surface: \(sample.title)",
+                        isUser: false,
+                        genUISurface: event
+                    )
+                    withAnimation(.bouncy(duration: 0.4)) {
+                        messages.append(aiMsg)
+                        agentState = .idle
+                    }
+                    return
+                }
+
                 let responses = [
                     "That's an interesting perspective! Let me expand on that...",
                     "I'd be happy to help with that. Here are some options.",
                     "Fascinating! Give me just a moment to pull up the details.",
-                    "Here's a detailed generative UI component based on your request."
+                    "Ask for 'showcase' anytime to render the GenUI component showcase here."
                 ]
 
-                let aiMsg = ChatMessage(text: responses.randomElement()!, isUser: false)
+                let aiMsg = ChatMessage(text: responses.randomElement() ?? responses[0], isUser: false)
                 withAnimation(.bouncy(duration: 0.4)) {
                     messages.append(aiMsg)
                     agentState = .idle
                 }
+            }
+        }
+    }
+
+    private func cloneShowcaseEvent(_ event: GenUIEvent) -> GenUIEvent {
+        let suffix = UUID().uuidString
+        return GenUIEvent(
+            id: "\(event.id)-chat-\(suffix)",
+            schemaVersion: event.schemaVersion,
+            mode: event.mode,
+            surfaceID: "\(event.surfaceID)-chat-\(suffix)",
+            revision: event.revision,
+            correlationID: event.correlationID,
+            title: event.title,
+            body: event.body,
+            surfacePayload: event.surfacePayload,
+            contextPayload: event.contextPayload,
+            actionLabel: event.actionLabel,
+            actionPayload: event.actionPayload,
+            timestamp: event.timestamp
+        )
+    }
+
+    private func genUIActionKey(surfaceID: String, actionID: String) -> String {
+        "\(surfaceID)#\(actionID)"
+    }
+
+    private func genUIActionState(surfaceID: String, actionID: String) -> GenUIActionDispatchState? {
+        genUIActionStates[genUIActionKey(surfaceID: surfaceID, actionID: actionID)]
+    }
+
+    private func primaryActionID(from event: GenUIEvent) -> String? {
+        event.actionPayload["actionId"]?.stringValue
+            ?? event.actionPayload["action_id"]?.stringValue
+            ?? event.actionPayload["id"]?.stringValue
+    }
+
+    private func handleGenUIAction(_ event: GenUIEvent) {
+        let actionID = primaryActionID(from: event)
+        guard let actionID = actionID else {
+            let ack = ChatMessage(text: "Couldn't extract action from surface event.", isUser: false)
+            withAnimation(.bouncy(duration: 0.2)) {
+                messages.append(ack)
+            }
+            return
+        }
+
+        let key = genUIActionKey(surfaceID: event.surfaceID, actionID: actionID)
+        genUIActionStates[key] = GenUIActionDispatchState(status: .sending)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                genUIActionStates[key] = GenUIActionDispatchState(status: .succeeded)
+                let actionLabel = event.actionLabel
+                    ?? event.actionPayload["label"]?.stringValue
+                    ?? actionID
+                let ack = ChatMessage(
+                    text: "Action '\(actionLabel)' handled for \(event.title).",
+                    isUser: false
+                )
+                messages.append(ack)
+                agentState = .idle
             }
         }
     }
@@ -368,6 +453,8 @@ struct RetroDot: View {
 // MARK: - Message Bubble
 struct RetroMessageBubbleView: View {
     let message: ChatMessage
+    let onGenUIAction: (GenUIEvent) -> Void
+    var genUIActionState: (String, String) -> GenUIActionDispatchState?
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
@@ -385,55 +472,95 @@ struct RetroMessageBubbleView: View {
             }
 
             if message.isUser {
-                Text(message.text)
-                    .font(.body)
-                    .foregroundColor(.cream)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color.olive)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.oliveDark, lineWidth: 2)
-                    )
-                    .shadow(color: .shadowSoft, radius: 0, x: 2, y: 2)
+                userTextBubble(message.text)
             } else {
-                Text(message.text)
-                    .font(.body)
-                    .foregroundColor(.oliveDark)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .fill(LinearGradient(
-                                    colors: [Color(hex: 0xFDF9ED), Color(hex: 0xF4EFD7)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ))
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .fill(Color.olive.opacity(0.05))
-                                .padding(2)
-                        }
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(color: .shadowSoft, radius: 4, x: 1, y: 2)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.white.opacity(0.2))
-                            .blendMode(.screen)
-                    }
+                agentBubble
             }
 
             if message.isUser {
                 Circle()
                     .fill(Color.olive)
                     .frame(width: 28, height: 28)
-                    .overlay(Image(systemName: "person.fill").font(.system(size: 12)).foregroundColor(.cream))
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.cream)
+                    )
             } else {
                 Spacer(minLength: 38)
             }
         }
+    }
+
+    private func userTextBubble(_ text: String) -> some View {
+        messageTextBubble(text, isUser: true)
+    }
+
+    private var agentBubble: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !message.text.isEmpty {
+                messageTextBubble(message.text, isUser: false)
+            }
+
+            if let surface = message.genUISurface {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(surface.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.oliveDark)
+                    if !surface.body.isEmpty {
+                        Text(surface.body)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    GenUIComponentRenderer(
+                        event: surface,
+                        onAction: onGenUIAction,
+                        actionState: genUIActionState
+                    )
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(LinearGradient(
+                                colors: [Color(hex: 0xFDF9ED), Color(hex: 0xF4EFD7)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(Color.olive.opacity(0.04))
+                            .padding(2)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: .shadowSoft, radius: 4, x: 1, y: 2)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(Color.white.opacity(0.25))
+                        .blendMode(.screen)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func messageTextBubble(_ text: String, isUser: Bool) -> some View {
+        Text(text)
+            .font(.body)
+            .foregroundColor(isUser ? .cream : .oliveDark)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isUser ? Color.olive : Color.white.opacity(0.86))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                if isUser {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.oliveDark, lineWidth: 2)
+                }
+            }
+            .shadow(color: .shadowSoft, radius: isUser ? 0 : 4, x: isUser ? 2 : 1, y: isUser ? 2 : 2)
     }
 }
 
