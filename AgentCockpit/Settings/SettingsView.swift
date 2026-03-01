@@ -127,6 +127,11 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Toggle("Auto-synthesize GenUI from assistant text", isOn: $settings.implicitGenUIFromTextEnabled)
+                Text("When enabled, checklist/progress assistant text can render as GenUI cards when no embedded GenUI block is present.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Text("Diagnostics")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)

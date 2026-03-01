@@ -14,12 +14,14 @@ public enum ACConnectionState: Sendable, Equatable {
 public final class ACGatewayConnection: NSObject {
     // MARK: - Published state
     public private(set) var state: ACConnectionState = .disconnected
+    public let healthMonitor: ACConnectionHealthMonitor
 
     // MARK: - Internal
     private var wsTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var reconnectTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
+    private var pingTask: Task<Void, Never>?
 
     private let settings: ACSettingsStore
     private var onMessage: ((ACServerMessage) -> Void)?
@@ -28,9 +30,11 @@ public final class ACGatewayConnection: NSObject {
     private var backoffDelay: Double = 0.5
     private let backoffBase: Double = 1.7
     private let backoffMax: Double = 8.0
+    private let adaptiveBackoffMultiplier: Double = 0.7  // Reduce delay when quality is poor
 
     public init(settings: ACSettingsStore) {
         self.settings = settings
+        self.healthMonitor = ACConnectionHealthMonitor()
         super.init()
     }
 
@@ -38,6 +42,7 @@ public final class ACGatewayConnection: NSObject {
 
     public func connect(onMessage: @escaping (ACServerMessage) -> Void) {
         self.onMessage = onMessage
+        healthMonitor.monitor(connection: self)
         startConnect()
     }
 
@@ -46,8 +51,11 @@ public final class ACGatewayConnection: NSObject {
         reconnectTask = nil
         receiveTask?.cancel()
         receiveTask = nil
+        pingTask?.cancel()
+        pingTask = nil
         wsTask?.cancel(with: .normalClosure, reason: nil)
         wsTask = nil
+        healthMonitor.stopMonitoring()
         state = .disconnected
     }
 
@@ -134,8 +142,11 @@ public final class ACGatewayConnection: NSObject {
         case .authOk:
             state = .connected
             backoffDelay = 0.5 // reset on successful auth
+            healthMonitor.reset()
+            startPingLoop()
         case .authErr(let msg):
             state = .failed("Auth failed: \(msg)")
+            healthMonitor.recordFailure()
             wsTask?.cancel()
         case .ping:
             sendPong()
@@ -149,20 +160,86 @@ public final class ACGatewayConnection: NSObject {
     private func handleDisconnect(reason: String) {
         guard state != .disconnected else { return }
         print("[connection] Disconnected: \(reason)")
+        pingTask?.cancel()
+        pingTask = nil
         wsTask = nil
         state = .disconnected
+        healthMonitor.recordFailure()
         scheduleReconnect()
     }
 
     private func scheduleReconnect() {
         reconnectTask?.cancel()
-        let delay = backoffDelay
+
+        // Adaptive backoff: reduce delay if connection quality is poor
+        var delay = backoffDelay
+        let health = healthMonitor.currentHealth
+
+        if health.quality == .poor || health.quality == .critical {
+            // Reduce delay to retry faster when connection is unstable
+            delay = max(delay * adaptiveBackoffMultiplier, 0.1)
+            print("[connection] Adaptive backoff: reduced delay to \(String(format: "%.2f", delay))s due to poor quality")
+        }
+
         backoffDelay = min(backoffDelay * backoffBase, backoffMax)
+        healthMonitor.recordReconnect()
+
         print("[connection] Reconnecting in \(String(format: "%.1f", delay))s...")
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled else { return }
             self?.startConnect()
+        }
+    }
+
+    // MARK: - Ping Loop
+
+    private func startPingLoop() {
+        pingTask?.cancel()
+        pingTask = Task { [weak self] in
+            // Wait initial delay before first ping
+            try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+
+            while !Task.isCancelled {
+                guard let self = self else { break }
+                await self.performHealthPing()
+                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            }
+        }
+    }
+
+    private func performHealthPing() async {
+        guard state == .connected, let wsTask = wsTask else {
+            healthMonitor.recordFailure()
+            return
+        }
+
+        let startTime = Date()
+
+        // Send ping through WebSocket
+        do {
+            let pingMessage = ACPingMessage()
+            let data = try JSONEncoder().encode(pingMessage)
+            let string = String(data: data, encoding: .utf8) ?? ""
+
+            // Use a continuation to wait for pong response
+            await withCheckedContinuation { continuation in
+                wsTask.sendPing { [weak self] error in
+                    Task { @MainActor [weak self] in
+                        if let error = error {
+                            print("[connection] Ping failed: \(error.localizedDescription)")
+                            self?.healthMonitor.recordFailure()
+                        } else {
+                            let latency = Date().timeIntervalSince(startTime)
+                            self?.healthMonitor.recordSuccess(latency: latency)
+                        }
+                        continuation.resume()
+                    }
+                }
+            }
+        } catch {
+            print("[connection] Ping encode error: \(error)")
+            healthMonitor.recordFailure()
         }
     }
 }

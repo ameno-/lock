@@ -35,6 +35,11 @@ public struct ACAuthMessage: Encodable, Sendable {
     public init(token: String) { self.token = token }
 }
 
+public struct ACPingMessage: Encodable, Sendable {
+    public let type = "ping"
+    public init() {}
+}
+
 public struct ACPongMessage: Encodable, Sendable {
     public let type = "pong"
     public init() {}

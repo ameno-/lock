@@ -305,4 +305,103 @@ final class JSONRPCEventAdapterTests: XCTestCase {
         XCTAssertEqual(event.contextPayload["__sourceText"]?.stringValue, embedded)
         XCTAssertEqual(event.actionPayload["actionId"]?.stringValue, "continue")
     }
+
+    func testCodexAgentMessageChecklistSynthesizesImplicitGenUIEvent() {
+        let message = """
+        Sprint status:
+        - [x] Build and test
+        - [ ] Ship release
+        Progress now at 50%.
+        """
+
+        let mapped = JSONRPCEventAdapter.map(
+            protocolMode: .codex,
+            method: "item/completed",
+            params: [
+                "threadId": AnyCodable("thread-1"),
+                "item": AnyCodable([
+                    "id": AnyCodable("item-implicit-1"),
+                    "type": AnyCodable("agent_message"),
+                    "text": AnyCodable(message)
+                ])
+            ],
+            genuiEnabled: true,
+            implicitGenUIFromTextEnabled: true,
+            fallbackSessionKey: nil
+        )
+
+        guard case let .genUI(event)? = mapped?.event else {
+            return XCTFail("Expected checklist text to synthesize implicit GenUI")
+        }
+
+        XCTAssertEqual(event.surfaceID, "implicit-checklist")
+        XCTAssertEqual(event.title, "Checklist 1/2")
+        XCTAssertEqual(event.body, "- [x] Build and test\n- [ ] Ship release")
+        XCTAssertEqual(event.contextPayload["__sourceText"]?.stringValue, message)
+        XCTAssertEqual(event.contextPayload["__implicitFromText"]?.boolValue, true)
+        XCTAssertEqual(event.contextPayload["__implicitHeuristic"]?.stringValue, "checklist")
+        XCTAssertEqual(event.contextPayload["progressPercent"]?.intValue, 50)
+        XCTAssertEqual(event.surfacePayload["components"]?.arrayValue?.count, 2)
+    }
+
+    func testCodexAgentMessageProgressSynthesizesImplicitGenUIEvent() {
+        let message = "Release status: 65% complete after integration tests."
+
+        let mapped = JSONRPCEventAdapter.map(
+            protocolMode: .codex,
+            method: "item/completed",
+            params: [
+                "threadId": AnyCodable("thread-1"),
+                "item": AnyCodable([
+                    "id": AnyCodable("item-implicit-2"),
+                    "type": AnyCodable("agent_message"),
+                    "text": AnyCodable(message)
+                ])
+            ],
+            genuiEnabled: true,
+            implicitGenUIFromTextEnabled: true,
+            fallbackSessionKey: nil
+        )
+
+        guard case let .genUI(event)? = mapped?.event else {
+            return XCTFail("Expected progress text to synthesize implicit GenUI")
+        }
+
+        XCTAssertEqual(event.title, "Progress 65%")
+        XCTAssertEqual(event.body, message)
+        XCTAssertEqual(event.contextPayload["__sourceText"]?.stringValue, message)
+        XCTAssertEqual(event.contextPayload["__implicitFromText"]?.boolValue, true)
+        XCTAssertEqual(event.contextPayload["__implicitHeuristic"]?.stringValue, "progress")
+        XCTAssertEqual(event.contextPayload["progressPercent"]?.intValue, 65)
+        XCTAssertEqual(event.surfaceID, "implicit-progress")
+        XCTAssertEqual(event.surfacePayload["components"]?.arrayValue?.count, 2)
+    }
+
+    func testImplicitGenUISynthesisDisabledFallsBackToReasoning() {
+        let message = """
+        - [x] Build and test
+        - [ ] Ship release
+        """
+
+        let mapped = JSONRPCEventAdapter.map(
+            protocolMode: .codex,
+            method: "item/completed",
+            params: [
+                "threadId": AnyCodable("thread-1"),
+                "item": AnyCodable([
+                    "id": AnyCodable("item-implicit-3"),
+                    "type": AnyCodable("agent_message"),
+                    "text": AnyCodable(message)
+                ])
+            ],
+            genuiEnabled: true,
+            implicitGenUIFromTextEnabled: false,
+            fallbackSessionKey: nil
+        )
+
+        guard case let .reasoning(event)? = mapped?.event else {
+            return XCTFail("Expected reasoning fallback when implicit synthesis is disabled")
+        }
+        XCTAssertEqual(event.text, message)
+    }
 }

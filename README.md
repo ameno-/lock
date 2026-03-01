@@ -113,6 +113,11 @@ Notes:
 - `genuiEnabled = true`: explicit GenUI updates and embedded assistant GenUI blocks render as GenUI cards.
 - `genuiEnabled = false`: GenUI payloads are not rendered as cards and fall back to raw output events.
 - Embedded GenUI extraction preserves the full original assistant text in `context.__sourceText` while keeping existing context keys from the embedded payload.
+- `implicitGenUIFromTextEnabled = true` (default): when no embedded GenUI block is present, codex `agent_message` text can synthesize a GenUI card from deterministic heuristics.
+  - heuristic priority: markdown checklist items (`- [ ]`, `- [x]`) first, then progress percentages (for example `65% complete`).
+  - synthesized cards include `context.__sourceText` (full original assistant text) and `context.__implicitFromText = true`.
+  - if no heuristic matches, behavior remains normal reasoning/text rendering.
+- `implicitGenUIFromTextEnabled = false`: assistant text is not auto-synthesized into GenUI cards.
 
 ## GenUI diagnostics in app
 
@@ -123,6 +128,9 @@ In `Settings > Features`, AgentCockpit now shows lightweight GenUI diagnostics:
   - `GenUI parsed`
   - `GenUI ignored`
   - `GenUI embedded`
+- feature toggles:
+  - `Enable GenUI`
+  - `Auto-synthesize GenUI from assistant text` (default on)
 
 When the session list is empty, `Open Settings` is available directly from the empty state so diagnostics remain reachable without an active session.
 

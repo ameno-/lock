@@ -94,6 +94,7 @@ public final class AppModel {
                 method: method,
                 params: params,
                 genuiEnabled: settings.genuiEnabled,
+                implicitGenUIFromTextEnabled: settings.implicitGenUIFromTextEnabled,
                 fallbackSessionKey: promotedSessionKey
             ) {
                 eventStore.ingest(event: mapped.event, sessionKey: mapped.sessionKey)
@@ -306,7 +307,8 @@ public final class AppModel {
         case .genUI(let genUIEvent):
             telemetry.parsed += 1
             didMutate = true
-            if genUIEvent.contextPayload["__sourceText"] != nil {
+            if genUIEvent.contextPayload["__sourceText"] != nil,
+               genUIEvent.contextPayload["__implicitFromText"]?.boolValue != true {
                 telemetry.embeddedParsed += 1
             }
         case .rawOutput(let rawEvent):
@@ -334,6 +336,7 @@ enum JSONRPCEventAdapter {
         method: String,
         params: [String: AnyCodable]?,
         genuiEnabled: Bool,
+        implicitGenUIFromTextEnabled: Bool = true,
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         switch protocolMode {
@@ -342,6 +345,7 @@ enum JSONRPCEventAdapter {
                 method: method,
                 params: params,
                 genuiEnabled: genuiEnabled,
+                implicitGenUIFromTextEnabled: implicitGenUIFromTextEnabled,
                 fallbackSessionKey: fallbackSessionKey
             )
         case .codex:
@@ -349,6 +353,7 @@ enum JSONRPCEventAdapter {
                 method: method,
                 params: params,
                 genuiEnabled: genuiEnabled,
+                implicitGenUIFromTextEnabled: implicitGenUIFromTextEnabled,
                 fallbackSessionKey: fallbackSessionKey
             )
         }
@@ -358,6 +363,7 @@ enum JSONRPCEventAdapter {
         method: String,
         params: [String: AnyCodable]?,
         genuiEnabled: Bool,
+        implicitGenUIFromTextEnabled _: Bool,
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         guard method == "session/update" else { return nil }
@@ -501,6 +507,7 @@ enum JSONRPCEventAdapter {
         method: String,
         params: [String: AnyCodable]?,
         genuiEnabled: Bool,
+        implicitGenUIFromTextEnabled: Bool,
         fallbackSessionKey: String?
     ) -> (sessionKey: String, event: CanvasEvent)? {
         let root = params ?? [:]
@@ -629,6 +636,26 @@ enum JSONRPCEventAdapter {
                     )
                 case .notGenUI:
                     break
+                }
+                if genuiEnabled && implicitGenUIFromTextEnabled {
+                    switch synthesizeImplicitGenUIEvent(
+                        from: parsedItem.text,
+                        protocolPrefix: "codex",
+                        sessionKey: sessionKey,
+                        fallbackID: firstNonEmpty(
+                            parsedItem.id,
+                            root["itemId"]?.stringValue,
+                            root["item"]?.dictValue?["id"]?.stringValue
+                        ),
+                        fallbackTitle: "Codex GenUI"
+                    ) {
+                    case .event(let event):
+                        return (sessionKey, .genUI(event))
+                    case .invalid:
+                        break
+                    case .notGenUI:
+                        break
+                    }
                 }
                 let turnID = firstNonEmpty(
                     parsedItem.turnID,
@@ -1045,6 +1072,288 @@ enum JSONRPCEventAdapter {
             fallbackID: fallbackID,
             fallbackTitle: fallbackTitle
         )
+    }
+
+    private struct ChecklistSignal {
+        struct Item {
+            let label: String
+            let done: Bool
+        }
+
+        let total: Int
+        let completed: Int
+        let percent: Int
+        let body: String
+        let items: [Item]
+    }
+
+    private struct ProgressSignal {
+        let percent: Int
+        let body: String
+    }
+
+    private static func synthesizeImplicitGenUIEvent(
+        from sourceText: String,
+        protocolPrefix: String,
+        sessionKey: String,
+        fallbackID: String?,
+        fallbackTitle: String
+    ) -> GenUIParseResult {
+        let heuristicText = textForImplicitGenUIHeuristics(from: sourceText)
+
+        if let checklist = parseChecklistSignal(from: heuristicText) {
+            let context: [String: AnyCodable] = [
+                "__sourceText": AnyCodable(sourceText),
+                "__implicitFromText": AnyCodable(true),
+                "__implicitHeuristic": AnyCodable("checklist"),
+                "checklistTotal": AnyCodable(checklist.total),
+                "checklistCompleted": AnyCodable(checklist.completed),
+                "progressPercent": AnyCodable(checklist.percent)
+            ]
+            let checklistItems = checklist.items.map { item in
+                AnyCodable([
+                    "id": AnyCodable(item.label.lowercased().replacingOccurrences(of: " ", with: "-")),
+                    "label": AnyCodable(item.label),
+                    "done": AnyCodable(item.done),
+                ])
+            }
+            let checklistComponents: [AnyCodable] = [
+                AnyCodable([
+                    "id": AnyCodable("implicit-checklist"),
+                    "type": AnyCodable("checklist"),
+                    "title": AnyCodable("Checklist"),
+                    "items": AnyCodable(checklistItems),
+                ]),
+                AnyCodable([
+                    "id": AnyCodable("implicit-progress"),
+                    "type": AnyCodable("progress"),
+                    "label": AnyCodable("Completion"),
+                    "value": AnyCodable(Double(checklist.percent) / 100.0),
+                ]),
+            ]
+            let payload: [String: AnyCodable] = [
+                "kind": AnyCodable("genui/implicit"),
+                "genUI": AnyCodable([
+                    "id": AnyCodable(deterministicImplicitSurfaceID(kind: "checklist")),
+                    "schemaVersion": AnyCodable("v0"),
+                    "mode": AnyCodable("snapshot"),
+                    "title": AnyCodable("Checklist \(checklist.completed)/\(checklist.total)"),
+                    "text": AnyCodable(truncated(checklist.body, maxLength: 4_000)),
+                    "context": AnyCodable(context),
+                    "components": AnyCodable(checklistComponents),
+                ])
+            ]
+            if case let .event(event) = parseGenUIEvent(
+                payload: payload,
+                protocolPrefix: protocolPrefix,
+                sessionKey: sessionKey,
+                fallbackID: fallbackID,
+                fallbackTitle: fallbackTitle
+            ) {
+                return .event(event)
+            }
+            return .notGenUI
+        }
+
+        if let progress = parseProgressSignal(from: heuristicText) {
+            let context: [String: AnyCodable] = [
+                "__sourceText": AnyCodable(sourceText),
+                "__implicitFromText": AnyCodable(true),
+                "__implicitHeuristic": AnyCodable("progress"),
+                "progressPercent": AnyCodable(progress.percent)
+            ]
+            let progressComponents: [AnyCodable] = [
+                AnyCodable([
+                    "id": AnyCodable("implicit-progress"),
+                    "type": AnyCodable("progress"),
+                    "label": AnyCodable("Progress"),
+                    "value": AnyCodable(Double(progress.percent) / 100.0),
+                ]),
+                AnyCodable([
+                    "id": AnyCodable("implicit-text"),
+                    "type": AnyCodable("text"),
+                    "text": AnyCodable(truncated(progress.body, maxLength: 500)),
+                ]),
+            ]
+            let payload: [String: AnyCodable] = [
+                "kind": AnyCodable("genui/implicit"),
+                "genUI": AnyCodable([
+                    "id": AnyCodable(deterministicImplicitSurfaceID(kind: "progress")),
+                    "schemaVersion": AnyCodable("v0"),
+                    "mode": AnyCodable("snapshot"),
+                    "title": AnyCodable("Progress \(progress.percent)%"),
+                    "text": AnyCodable(truncated(progress.body, maxLength: 4_000)),
+                    "context": AnyCodable(context),
+                    "components": AnyCodable(progressComponents),
+                ])
+            ]
+            if case let .event(event) = parseGenUIEvent(
+                payload: payload,
+                protocolPrefix: protocolPrefix,
+                sessionKey: sessionKey,
+                fallbackID: fallbackID,
+                fallbackTitle: fallbackTitle
+            ) {
+                return .event(event)
+            }
+        }
+
+        return .notGenUI
+    }
+
+    private static func textForImplicitGenUIHeuristics(from text: String) -> String {
+        let withoutFenced = replacingRegexMatches(
+            pattern: "```[\\s\\S]*?```",
+            in: text,
+            with: "\n"
+        )
+        return replacingRegexMatches(
+            pattern: "`[^`]*`",
+            in: withoutFenced,
+            with: " "
+        )
+    }
+
+    private static func parseChecklistSignal(from text: String) -> ChecklistSignal? {
+        guard let regex = try? NSRegularExpression(
+            pattern: "(?m)^\\s*[-*]\\s*\\[([ xX])\\]\\s+(.+?)\\s*$"
+        ) else {
+            return nil
+        }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, options: [], range: nsRange)
+
+        var lines: [String] = []
+        var items: [ChecklistSignal.Item] = []
+        var completed = 0
+        lines.reserveCapacity(matches.count)
+        items.reserveCapacity(matches.count)
+
+        for match in matches {
+            guard match.numberOfRanges > 2,
+                  let markerRange = Range(match.range(at: 1), in: text),
+                  let itemRange = Range(match.range(at: 2), in: text)
+            else {
+                continue
+            }
+            let marker = text[markerRange]
+            let itemText = text[itemRange].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !itemText.isEmpty else { continue }
+            let isCompleted = marker.lowercased() == "x"
+            if isCompleted {
+                completed += 1
+            }
+            lines.append("- [\(isCompleted ? "x" : " ")] \(itemText)")
+            items.append(.init(label: itemText, done: isCompleted))
+        }
+
+        guard !lines.isEmpty else { return nil }
+        let total = lines.count
+        let percent = Int((Double(completed) / Double(total) * 100).rounded())
+        return ChecklistSignal(
+            total: total,
+            completed: completed,
+            percent: percent,
+            body: lines.joined(separator: "\n"),
+            items: items
+        )
+    }
+
+    private static func parseProgressSignal(from text: String) -> ProgressSignal? {
+        guard let regex = try? NSRegularExpression(
+            pattern: "(\\d{1,3}(?:\\.\\d+)?)\\s*%"
+        ) else {
+            return nil
+        }
+        let nsText = text as NSString
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, options: [], range: nsRange)
+        guard !matches.isEmpty else { return nil }
+
+        struct Candidate {
+            let percent: Int
+            let body: String
+            let hasKeyword: Bool
+        }
+
+        let keywords = [
+            "progress",
+            "complete",
+            "completed",
+            "completion",
+            "done",
+            "remaining",
+            "milestone"
+        ]
+
+        var candidates: [Candidate] = []
+        for match in matches {
+            guard match.numberOfRanges > 1,
+                  let numberRange = Range(match.range(at: 1), in: text),
+                  let number = Double(text[numberRange]),
+                  number >= 0,
+                  number <= 100
+            else {
+                continue
+            }
+
+            let percent = Int(number.rounded())
+            let body = lineSnippet(
+                containing: match.range(at: 0),
+                in: text
+            ) ?? "Progress update: \(percent)%"
+
+            let start = max(0, match.range(at: 0).location - 32)
+            let end = min(nsText.length, NSMaxRange(match.range(at: 0)) + 32)
+            let window = nsText.substring(
+                with: NSRange(location: start, length: max(0, end - start))
+            ).lowercased()
+            let hasKeyword = keywords.contains(where: window.contains)
+            candidates.append(Candidate(percent: percent, body: body, hasKeyword: hasKeyword))
+        }
+
+        if let prioritized = candidates.first(where: { $0.hasKeyword }) {
+            return ProgressSignal(percent: prioritized.percent, body: prioritized.body)
+        }
+        if candidates.count == 1, let only = candidates.first {
+            return ProgressSignal(percent: only.percent, body: only.body)
+        }
+        return nil
+    }
+
+    private static func lineSnippet(containing range: NSRange, in text: String) -> String? {
+        guard let swiftRange = Range(range, in: text) else { return nil }
+        let lineStart = text[..<swiftRange.lowerBound].lastIndex(of: "\n").map { text.index(after: $0) }
+            ?? text.startIndex
+        let lineEnd = text[swiftRange.upperBound...].firstIndex(of: "\n") ?? text.endIndex
+        let line = text[lineStart..<lineEnd].trimmingCharacters(in: .whitespacesAndNewlines)
+        return line.isEmpty ? nil : line
+    }
+
+    private static func deterministicImplicitSurfaceID(kind: String) -> String {
+        let normalized = kind
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "-")
+        return "implicit-\(normalized.isEmpty ? "assistant-message" : normalized)"
+    }
+
+    private static func replacingRegexMatches(
+        pattern: String,
+        in text: String,
+        with replacement: String
+    ) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return text
+        }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, options: [], range: nsRange, withTemplate: replacement)
+    }
+
+    private static func truncated(_ text: String, maxLength: Int) -> String {
+        guard text.count > maxLength else { return text }
+        let end = text.index(text.startIndex, offsetBy: maxLength)
+        return String(text[..<end]) + "..."
     }
 
     private static func mergeEmbeddedSourceText(

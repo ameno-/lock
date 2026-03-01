@@ -1,0 +1,8 @@
+{
+  "session_id": "6a4851d7-bc1b-4624-bda0-0e1e3a5dddd6",
+  "prompts": [
+    "First read ALL of the AGENTS.md file and README.md file super carefully and understand ALL of both! Then use your code investigation agent mode to fully understand the code, and technical architecture and purpose of the project.",
+    "ok, I want you to focus more of your effort on the application experience and user experience. are there features better suited for agentics that neither of us have used, or not used enough? Is gen ui that feature, if so, how can we iterate and improve it?",
+    "THis is great. I want you to create a plan to implement these features, but we first need to think through agent managed state further and integrating that with Genui. You toch A really interesting point. I want the agent to manage the session, but the iPhone application doesn't necessarily have an agent present. Is there a way that on my website could serve that I could run a small agent that is managing my sessions and is providing me a bit of that context into what's happening and can manage the session cards and state for sessions and notifications?"
+  ]
+}
