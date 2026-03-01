@@ -309,11 +309,7 @@ enum GenUIShowcaseData {
         ),
     ]
 
-    static let surfaceDockSamples: [GenUIEvent] = [
-        samples[0].event,
-        samples[2].event,
-        samples[3].event,
-    ]
+    static let surfaceDockSamples: [GenUIEvent] = samples.map(\.event)
 }
 
 struct GenUIComponentShowcase: View {

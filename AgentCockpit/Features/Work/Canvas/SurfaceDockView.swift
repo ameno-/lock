@@ -207,8 +207,55 @@ private struct SurfaceDockCard: View {
                         .font(.caption2.weight(.semibold))
                 }
             }
-        case .actions, .diffPreview, .codeBlock:
-            EmptyView()
+        case .actions(let actions):
+            HStack(spacing: 4) {
+                if actions.items.isEmpty {
+                    Text("No actions")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Label("\(actions.items.count)", systemImage: "bolt.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                    Text("actions")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+        case .diffPreview(let diff):
+            HStack(spacing: 4) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                if diff.additions > 0 {
+                    Text("+\(diff.additions)")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                }
+                if diff.deletions > 0 {
+                    Text("-\(diff.deletions)")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+                if let path = diff.filePath {
+                    Text(path)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+        case .codeBlock(let code):
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.purple)
+                Text(code.language ?? "code")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
     }
 
