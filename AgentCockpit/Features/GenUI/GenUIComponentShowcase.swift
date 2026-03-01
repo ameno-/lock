@@ -80,6 +80,70 @@ enum GenUIShowcaseData {
         ),
 
         GenUIShowcaseSample(
+            title: "Progress",
+            event: GenUIEvent(
+                id: "showcase/progress",
+                title: "Build Progress",
+                body: "Single progress rendering test",
+                surfacePayload: [
+                    "components": AnyCodable([
+                        AnyCodable([
+                            "id": AnyCodable("pipeline-progress"),
+                            "type": AnyCodable("progress"),
+                            "label": AnyCodable("Release Pipeline"),
+                            "value": AnyCodable(0.44),
+                        ]),
+                    ]),
+                ]
+            )
+        ),
+
+        GenUIShowcaseSample(
+            title: "Checklist",
+            event: GenUIEvent(
+                id: "showcase/checklist",
+                title: "Checklist",
+                body: "Single checklist rendering test",
+                surfacePayload: [
+                    "components": AnyCodable([
+                        AnyCodable([
+                            "id": AnyCodable("migration-checklist"),
+                            "type": AnyCodable("checklist"),
+                            "title": AnyCodable("Readiness"),
+                            "items": AnyCodable([
+                                AnyCodable(["id": AnyCodable("seed"), "label": AnyCodable("Seed data"), "done": AnyCodable(true)]),
+                                AnyCodable(["id": AnyCodable("migrations"), "label": AnyCodable("Run migrations"), "done": AnyCodable(true)]),
+                                AnyCodable(["id": AnyCodable("verify"), "label": AnyCodable("Verify schema"), "done": AnyCodable(false)]),
+                            ]),
+                        ]),
+                    ]),
+                ]
+            )
+        ),
+
+        GenUIShowcaseSample(
+            title: "Actions",
+            event: GenUIEvent(
+                id: "showcase/actions",
+                title: "Action Buttons",
+                body: "Action component rendering test",
+                surfacePayload: [
+                    "components": AnyCodable([
+                        AnyCodable([
+                            "id": AnyCodable("approvals"),
+                            "type": AnyCodable("actions"),
+                            "actions": AnyCodable([
+                                AnyCodable(["id": AnyCodable("approve"), "label": AnyCodable("Approve")]),
+                                AnyCodable(["id": AnyCodable("review"), "label": AnyCodable("Needs Review")]),
+                                AnyCodable(["id": AnyCodable("reject"), "label": AnyCodable("Reject")]),
+                            ]),
+                        ]),
+                    ]),
+                ]
+            )
+        ),
+
+        GenUIShowcaseSample(
             title: "Decision",
             event: GenUIEvent(
                 id: "showcase/decision",
