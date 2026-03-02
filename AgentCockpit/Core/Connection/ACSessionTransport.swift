@@ -208,10 +208,10 @@ public final class ACSessionTransport {
         }
     }
 
-    public func createSession() async throws -> ACSessionEntry? {
+    public func createSession(provider: String? = nil) async throws -> ACSessionEntry? {
         switch settings.serverProtocol {
         case .acp:
-            return try await createSessionForACP()
+            return try await createSessionForACP(provider: provider)
         case .codex:
             return try await createSessionForCodex()
         }

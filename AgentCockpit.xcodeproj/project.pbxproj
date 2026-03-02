@@ -77,6 +77,7 @@
 		E9993BD71B9AF4BB6C5930D1 /* ACSessionTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B78004586AD3F460010C5EC /* ACSessionTransport.swift */; };
 		EA523B02A3B55525D4884350 /* ACPProtocolParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB22EC61F26AACB3D0D6CF92 /* ACPProtocolParser.swift */; };
 		EE2EB05969E6DBEA18A86CD6 /* AgentRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C27F4FF9F2708AF640F1A96 /* AgentRowView.swift */; };
+		A1B2C3D4E5F60002 /* ProviderPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001 /* ProviderPickerSheet.swift */; };
 		F207134725AD95550A487851 /* AgenticKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B355DB3EE5DBF25DD6B55DD /* AgenticKeyboard.swift */; };
 		F2FF9D66C2458C6193FD5D5A /* GenUIActionDispatchState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECF2F24569BAC37960C6352 /* GenUIActionDispatchState.swift */; };
 		F9C91B3067EC0809FAFF7757 /* AssistantTextParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ED95A1173253717E5F5B27 /* AssistantTextParser.swift */; };
@@ -132,6 +133,7 @@
 		7728CBEC53AA85C1A29849F3 /* ToolUseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolUseCard.swift; sourceTree = "<group>"; };
 		7A0108AA89318C9E01F26169 /* CodexHistoryMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHistoryMergeTests.swift; sourceTree = "<group>"; };
 		7C27F4FF9F2708AF640F1A96 /* AgentRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRowView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001 /* ProviderPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderPickerSheet.swift; sourceTree = "<group>"; };
 		885EF6EC02BE143E83CB023C /* ReasoningCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningCard.swift; sourceTree = "<group>"; };
 		8DF4C03FE337107551B9412A /* GenUIRenderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIRenderModel.swift; sourceTree = "<group>"; };
 		9171183E0945D10BFC7FDA64 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -411,6 +413,7 @@
 			children = (
 				E7174A78B3CA517F5C5C9D41 /* AgentDetailView.swift */,
 				7C27F4FF9F2708AF640F1A96 /* AgentRowView.swift */,
+				A1B2C3D4E5F60001 /* ProviderPickerSheet.swift */,
 				A42727ADB2A95EEFC551C541 /* AIsView.swift */,
 				5B845FE5C1469E72E717E5D0 /* AIsViewModel.swift */,
 			);
@@ -573,6 +576,7 @@
 				4B77FC130688B068610BC921 /* AgentEventParser.swift in Sources */,
 				5227345A492915B4C3F5F736 /* AgentEventStore.swift in Sources */,
 				EE2EB05969E6DBEA18A86CD6 /* AgentRowView.swift in Sources */,
+				A1B2C3D4E5F60002 /* ProviderPickerSheet.swift in Sources */,
 				F207134725AD95550A487851 /* AgenticKeyboard.swift in Sources */,
 				8ECE0A50A5FC3D6DF3DE5DC3 /* AppModel.swift in Sources */,
 				F9C91B3067EC0809FAFF7757 /* AssistantTextParser.swift in Sources */,

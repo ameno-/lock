@@ -1,6 +1,29 @@
 // AIsViewModel.swift — Polls sessions.list every 5s
 import Foundation
 
+struct ProviderInfo: Identifiable, Sendable {
+    let name: String
+    let machineId: String
+    let capabilities: [String]
+    var id: String { name }
+
+    var displayName: String {
+        switch name.lowercased() {
+        case "pi": return "Pi"
+        case "codex": return "Codex"
+        default: return name.capitalized
+        }
+    }
+
+    var icon: String {
+        switch name.lowercased() {
+        case "pi": return "wand.and.stars"
+        case "codex": return "chevron.left.forwardslash.chevron.right"
+        default: return "cpu"
+        }
+    }
+}
+
 enum SessionListFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case active
@@ -34,6 +57,7 @@ struct SessionRowSummary: Identifiable, Sendable {
     let protocolLabel: String
     let lastActivityLabel: String
     let tokenUsageLabel: String?
+    let provider: String?
 }
 
 @Observable
@@ -53,6 +77,8 @@ final class AIsViewModel {
     var searchQuery: String = ""
     var isLoading = false
     var error: String? = nil
+    var availableProviders: [ProviderInfo] = []
+    var showingProviderPicker = false
 
     init(appModel: AppModel) {
         self.appModel = appModel
@@ -116,9 +142,9 @@ final class AIsViewModel {
         }
     }
 
-    func createSession() async {
+    func createSession(provider: String? = nil) async {
         do {
-            guard let created = try await appModel.transport.createSession() else {
+            guard let created = try await appModel.transport.createSession(provider: provider) else {
                 let protocolName = switch appModel.settings.serverProtocol {
                 case .acp: "ACP"
                 case .codex: "Codex"
@@ -130,6 +156,46 @@ final class AIsViewModel {
             await refresh()
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    func fetchProviders() async {
+        guard appModel.connection.state == .connected,
+              appModel.settings.serverProtocol == .acp else {
+            availableProviders = []
+            return
+        }
+        do {
+            let result = try await appModel.transport.requestJSON(
+                method: "provider/list",
+                params: nil
+            )
+            let providersArray = result?.dictValue?["providers"]?.arrayValue ?? []
+            availableProviders = providersArray.compactMap { item in
+                guard let dict = item.dictValue,
+                      let name = dict["name"]?.stringValue else { return nil }
+                let machineId = dict["machineId"]?.stringValue ?? ""
+                let caps = dict["capabilities"]?.arrayValue?.compactMap(\.stringValue) ?? []
+                return ProviderInfo(name: name, machineId: machineId, capabilities: caps)
+            }
+        } catch {
+            availableProviders = []
+        }
+    }
+
+    func onPlusTapped() {
+        Task {
+            if appModel.settings.serverProtocol == .acp {
+                await fetchProviders()
+                if availableProviders.count > 1 {
+                    showingProviderPicker = true
+                } else {
+                    // Single or no providers — create directly
+                    await createSession(provider: availableProviders.first?.name)
+                }
+            } else {
+                await createSession()
+            }
         }
     }
 
@@ -155,7 +221,8 @@ final class AIsViewModel {
             isPromoted: isPromoted,
             protocolLabel: protocolLabel,
             lastActivityLabel: lastActivityText(from: lastActivity),
-            tokenUsageLabel: tokenUsageText(from: digest?.tokenUsage)
+            tokenUsageLabel: tokenUsageText(from: digest?.tokenUsage),
+            provider: session.provider
         )
     }
 

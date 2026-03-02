@@ -21,10 +21,13 @@ extension ACSessionTransport {
         }
     }
 
-    func createSessionForACP() async throws -> ACSessionEntry? {
+    func createSessionForACP(provider: String? = nil) async throws -> ACSessionEntry? {
         var params: [String: AnyCodable] = [:]
         if !settings.workingDirectory.isEmpty {
             params["cwd"] = AnyCodable(settings.workingDirectory)
+        }
+        if let provider {
+            params["provider"] = AnyCodable(provider)
         }
         do {
             let result = try await requestJSON(
@@ -238,6 +241,9 @@ extension ACSessionTransport {
             fallback: key
         )
 
+        let provider = session["provider"]?.stringValue
+            ?? root["provider"]?.stringValue
+
         return ACSessionEntry(
             key: key,
             name: name,
@@ -249,7 +255,8 @@ extension ACSessionTransport {
             cwd: Self.acpCwd(from: session, root: root),
             preview: preview,
             statusText: status,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            provider: provider
         )
     }
 

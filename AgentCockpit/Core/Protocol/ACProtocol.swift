@@ -171,6 +171,8 @@ public struct ACSessionEntry: Sendable, Identifiable {
     public let preview: String?
     public let statusText: String?
     public let updatedAt: Date?
+    /// Which provider this session is bound to (e.g., "pi", "codex")
+    public let provider: String?
 
     public init(
         key: String,
@@ -183,7 +185,8 @@ public struct ACSessionEntry: Sendable, Identifiable {
         cwd: String? = nil,
         preview: String? = nil,
         statusText: String? = nil,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        provider: String? = nil
     ) {
         self.key = key
         self.name = name
@@ -196,6 +199,7 @@ public struct ACSessionEntry: Sendable, Identifiable {
         self.preview = preview
         self.statusText = statusText
         self.updatedAt = updatedAt
+        self.provider = provider
     }
 }
 

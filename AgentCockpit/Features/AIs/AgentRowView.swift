@@ -24,6 +24,10 @@ struct AgentRowView: View {
 
                     chip(summary.protocolLabel, tint: .secondary, neutral: true)
 
+                    if let provider = summary.provider {
+                        providerChip(provider)
+                    }
+
                     Spacer(minLength: 0)
                 }
 
@@ -83,6 +87,26 @@ struct AgentRowView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Opens session")
+    }
+
+    @ViewBuilder
+    private func providerChip(_ name: String) -> some View {
+        let (label, color): (String, Color) = switch name.lowercased() {
+        case "pi": ("Pi", .purple)
+        case "codex": ("Codex", .green)
+        default: (name.capitalized, .blue)
+        }
+        HStack(spacing: 3) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.12), in: Capsule())
     }
 
     @ViewBuilder

@@ -52,7 +52,7 @@ struct SettingsView: View {
             }
 
             Section("Quick Profiles") {
-                Button("Pi ACP Local (ws://127.0.0.1:8765)") {
+                Button("Pi ACP Local (ws://127.0.0.1:8765/ws)") {
                     applyPiACPProfile()
                 }
                 Button("Codex Local (ws://127.0.0.1:8788)") {
@@ -226,7 +226,7 @@ struct SettingsView: View {
         appModel.settings.scheme = "ws"
         appModel.settings.host = "127.0.0.1"
         appModel.settings.port = 8765
-        appModel.settings.path = "/"
+        appModel.settings.path = "/ws"
         didApplyProfile = true
         syncInputsFromSettings()
     }

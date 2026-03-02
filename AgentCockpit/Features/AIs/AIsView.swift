@@ -76,7 +76,7 @@ struct AIsView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    Task { await viewModel.createSession() }
+                    viewModel.onPlusTapped()
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -91,8 +91,18 @@ struct AIsView: View {
                 .accessibilityLabel("Open Settings")
             }
         }
-        .onAppear { viewModel.start() }
+        .onAppear {
+            viewModel.start()
+            Task { await viewModel.fetchProviders() }
+        }
         .onDisappear { viewModel.stop() }
+        .sheet(isPresented: $viewModel.showingProviderPicker) {
+            ProviderPickerSheet(providers: viewModel.availableProviders) { provider in
+                viewModel.showingProviderPicker = false
+                Task { await viewModel.createSession(provider: provider.name) }
+            }
+            .presentationDetents([.medium])
+        }
         .alert("Error", isPresented: .init(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
